@@ -6,7 +6,7 @@ One line per decision, with the reason.
 - Added `Engine.swift`, `EpisodeTracker.swift`, `Theme.swift`, `WindowManager.swift` and `Views/SessionSummaryView.swift` beyond the suggested file list, to keep each file focused (frame loop, shared alert timing rules, colours, window handling, session summary).
 - The camera delivers 420f YUV frames instead of BGRA: Vision reads YUV directly and motion energy comes straight from the luma plane, which cut CPU from about 40% to about 30% of one core in measurements.
 - Full face detection runs on every 3rd frame. In between, the last landmark observation is passed back in as the face, and a landmark confidence below 0.5 forces a fresh detection. This saved about a third of the remaining CPU.
-- The video data output asks for 640x480 buffers explicitly (width and height in `videoSettings`), and the device's 640x480 format is selected directly. On this macOS version the VGA preset alone still delivered 1920x1080 frames. With 640x480 the whole pipeline measures about 11% of one core at 15 fps and about 170 MB of memory with the debug window closed.
+- The video data output asks for 640x480 buffers explicitly (width and height in `videoSettings`), and the device's 640x480 format is selected directly. On this macOS version the VGA preset alone still delivered 1920x1080 frames. With 640x480 the whole pipeline measures 11 to 12% of one core at 15 fps, and memory settles at about 196 MB with the debug window closed.
 - Motion energy uses a block average of the luma plane rather than a CIContext render to `.L8`. The CIContext path is still there for non-YUV frames.
 - `Info.plist` sets `NSCameraReactionEffectGesturesEnabledDefault` to false, so macOS camera reaction gestures (thumbs up, hearts) don't trigger effects and burn CPU inside Steady.
 - Compute device for Vision requests is left at the system default; forcing the Neural Engine or GPU made no measurable difference.
@@ -31,8 +31,12 @@ One line per decision, with the reason.
 - Automatic clip clean-up deletes files right away (to free space); deleting from the Clips window moves them to the Trash, as asked.
 - The debug window's "mini" layout is the same window shrunk to a small floating panel, so there is one place for the camera preview.
 - `os.Logger` with public messages (subsystem `com.arnav.steady`) mirrors the event log, so `log show --predicate 'subsystem == "com.arnav.steady"'` shows detections without opening debug mode.
-- `--show debug,settings,clips,stats,smile,gaze` opens windows at launch; it was added to check layouts without clicking through the menu.
+- `--show` takes a comma-separated list at launch: `debug`, `settings`, `clips`, `stats`, `smile`, `gaze`, `mini`, `menu`, `alert`, `session`, `pause`, and `--pane <name>` picks the Settings pane. It was added to check layouts and behaviour without clicking through the menu.
 - The app icon is drawn by `scripts/make-icon.swift` with plain bezier paths (no SF Symbols, since their license doesn't allow use in app icons) and cached in `build/`.
-- The menu shows hotkeys next to items (⌃⌥S, ⌃⌥X, ⌃⌥M, ⌃⌥D) and also uses section headers and SF Symbols, like native menus.
+- The menu shows hotkeys next to items (⌃⌥S, ⌃⌥X, ⌃⌥M, ⌃⌥D) and a section header. SF Symbols are set on the items, but this macOS version (27.2) draws no images in status-item menus for any app (checked with a minimal test menu), so they only appear on systems that show them.
 - Settings use a sidebar (`NavigationSplitView`) with grouped forms, one pane per area.
 - The repo stays private; making it public is left to the owner.
+- Pause (including "until resumed") is not saved across launches; turning Monitoring off is. A restart with a timed pause would otherwise need a timer that outlives the app.
+- Quitting during a study session records its minutes in the stats without showing the summary window.
+- The adaptive frame rate ignores the first 15 seconds after the camera starts, because loading the Vision models makes that window look busier than normal.
+- Debug mode shows a Frame size readout; it is how the 1080p frame problem was found, so it stays.

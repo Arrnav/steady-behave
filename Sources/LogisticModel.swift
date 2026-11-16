@@ -265,7 +265,8 @@ final class ModelStore {
 
     func deleteAll() {
         state.set(ModelFile())
-        try? FileManager.default.removeItem(at: url)
+        // Same serial queue as saving, so a save that was already queued can't bring the file back.
+        trainQueue.sync { try? FileManager.default.removeItem(at: url) }
         notify()
     }
 }

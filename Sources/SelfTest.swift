@@ -26,6 +26,7 @@ enum SelfTest {
         check("Upper-body movement raises the activity score", bodyMovement)
         check("Calm baseline follows quiet periods", calmBaseline)
         check("Settings keep defaults for missing keys", settingsMerge)
+        check("Deleting data clears models and stats", deleteData)
         check("Haptics loader reports a backend", haptics)
         print(failures == 0 ? "All checks passed" : "\(failures) check(s) did not pass")
         return failures == 0 ? 0 : 1
@@ -473,6 +474,24 @@ enum SelfTest {
         let s = Settings.load(from: stored)
         guard s.smileThreshold == 0.8 else { return "stored value lost" }
         guard s.gazeGrace == 2.5, s.clipCapMB == 500 else { return "defaults lost" }
+        return nil
+    }
+
+    private static func deleteData() -> String? {
+        let dir = tempDir()
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let (pos, neg) = syntheticData()
+        let models = ModelStore(url: dir.appendingPathComponent("models.json"))
+        models.update { $0.smile = LogisticModel.train(positives: pos, negatives: neg); $0.calmMotion = 1 }
+        let stats = StatsStore(url: dir.appendingPathComponent("stats.json"))
+        stats.update { $0.smileEpisodes = 3 }
+        stats.saveNow()
+        models.deleteAll()
+        stats.deleteAll()
+        guard models.smile == nil, models.file.calmMotion == nil else { return "model still loaded" }
+        guard !FileManager.default.fileExists(atPath: dir.appendingPathComponent("models.json").path) else { return "models.json still on disk" }
+        guard !FileManager.default.fileExists(atPath: dir.appendingPathComponent("stats.json").path) else { return "stats.json still on disk" }
+        guard StatsStore(url: dir.appendingPathComponent("stats.json")).today.smileEpisodes == 0 else { return "stats came back" }
         return nil
     }
 
