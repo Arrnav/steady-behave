@@ -105,19 +105,17 @@ struct OverlayView: View {
 
     var body: some View {
         let color = model.kind.color
-        let glowWidth: CGFloat = model.quiet ? 10 : 22
-        let intensity: Double = model.quiet ? 0.45 : 0.9
+        let quiet = model.quiet
         let shape = RoundedRectangle(cornerRadius: geometry.cornerRadius, style: .continuous)
 
         ZStack(alignment: .top) {
+            // Half of a blurred border falls off-screen, so the layers start strong:
+            // a wide soft halo plus a narrower, brighter band at the edge.
             ZStack {
-                shape.strokeBorder(color.opacity(intensity), lineWidth: glowWidth)
-                    .blur(radius: glowWidth * 0.8)
-                shape.strokeBorder(
-                    LinearGradient(colors: [color.opacity(intensity), color.opacity(intensity * 0.6)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: model.quiet ? 2 : 3)
-                    .blur(radius: 2)
+                shape.strokeBorder(color.opacity(quiet ? 0.45 : 0.95), lineWidth: quiet ? 16 : 40)
+                    .blur(radius: quiet ? 10 : 20)
+                shape.strokeBorder(color.opacity(quiet ? 0.5 : 0.95), lineWidth: quiet ? 4 : 9)
+                    .blur(radius: quiet ? 2 : 4)
             }
             .mask(notchMask)
 
@@ -129,18 +127,9 @@ struct OverlayView: View {
     }
 
     /// Everything except the notch, so the glow stays clear of the camera housing.
+    /// An even-odd shape is used because blend-mode masks don't composite reliably in a live window.
     private var notchMask: some View {
-        ZStack(alignment: .topLeading) {
-            Rectangle().fill(.white)
-            if let notch = geometry.notch {
-                RoundedRectangle(cornerRadius: 10, style: .continuous)
-                    .fill(.black)
-                    .frame(width: notch.width + 24, height: notch.height + 12)
-                    .offset(x: notch.minX - 12, y: -6)
-                    .blendMode(.destinationOut)
-            }
-        }
-        .compositingGroup()
+        NotchCutout(notch: geometry.notch).fill(.white, style: FillStyle(eoFill: true))
     }
 
     private var label: some View {
@@ -172,5 +161,19 @@ struct OverlayView: View {
         .shadow(color: .black.opacity(0.15), radius: 8, y: 2)
         .opacity(model.quiet ? 0.75 : 1)
         .accessibilityElement(children: .combine)
+    }
+}
+
+/// The whole rectangle with a rounded hole around the notch (when there is one).
+struct NotchCutout: Shape {
+    var notch: CGRect?
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path(rect)
+        if let notch {
+            let hole = CGRect(x: notch.minX - 12, y: -6, width: notch.width + 24, height: notch.height + 12)
+            path.addRoundedRect(in: hole, cornerSize: CGSize(width: 10, height: 10), style: .continuous)
+        }
+        return path
     }
 }

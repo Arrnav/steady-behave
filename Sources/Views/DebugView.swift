@@ -53,20 +53,32 @@ final class DebugModel: ObservableObject {
     }
 }
 
+/// Whether the debug window shows the compact mini layout.
+final class DebugWindowState: ObservableObject {
+    static let shared = DebugWindowState()
+    @Published var mini = false
+}
+
 enum DebugWindow {
     static let id = "debug"
     static let fullSize = NSSize(width: 1220, height: 800)
     static let miniSize = NSSize(width: 340, height: 430)
 
     static func show() {
-        let w = WindowManager.shared.show(id, title: "Steady Debug", size: fullSize, minSize: NSSize(width: 320, height: 400)) {
+        let w = WindowManager.shared.show(id, title: "Steady Debug", size: fullSize, minSize: NSSize(width: 320, height: 400),
+                                          onClose: { DebugWindowState.shared.mini = false }) {
             DebugView()
+        }
+        // A window closed in mini layout must not reopen at the mini size.
+        if !DebugWindowState.shared.mini, w.frame.width < 900 {
+            w.setContentSize(fullSize)
         }
         w.level = AppState.shared.settings.debugKeepOnTop ? .floating : .normal
     }
 
     static func setMini(_ mini: Bool) {
         guard let w = WindowManager.shared.window(id) else { return }
+        withAnimation(.snappy(duration: 0.25)) { DebugWindowState.shared.mini = mini }
         let size = mini ? miniSize : fullSize
         var frame = w.frame
         let newFrame = w.frameRect(forContentRect: NSRect(origin: .zero, size: size))
@@ -86,7 +98,8 @@ struct DebugView: View {
     @StateObject private var model = DebugModel()
     @ObservedObject private var app = AppState.shared
     @ObservedObject private var focus = FocusContext.shared
-    @State private var mini = false
+    @ObservedObject private var windowState = DebugWindowState.shared
+    private var mini: Bool { windowState.mini }
 
     private var layers: Set<DebugLayer> {
         Set(DebugLayer.allCases.filter { app.settings.layer($0) })
@@ -157,11 +170,10 @@ struct DebugView: View {
                 .controlSize(.small)
         }
         .padding(10)
-        .frame(minWidth: 300)
+        .frame(minWidth: 300, maxHeight: .infinity, alignment: .top)
     }
 
     private func setMini(_ value: Bool) {
-        withAnimation(.snappy(duration: 0.25)) { mini = value }
         DebugWindow.setMini(value)
     }
 

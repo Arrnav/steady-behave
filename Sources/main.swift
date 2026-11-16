@@ -73,7 +73,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openWindowsFromArguments()
     }
 
-    /// `--show debug,settings,...` opens windows at launch (handy for checking layouts); `session` starts a 25 min session.
+    /// `--show debug,settings,...` opens windows at launch (handy for checking layouts); `session` starts a 25 min session, `alert` shows a test smile alert, `menu` opens the menu.
     private func openWindowsFromArguments() {
         let args = CommandLine.arguments
         guard let i = args.firstIndex(of: "--show"), i + 1 < args.count else { return }
@@ -87,6 +87,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "smile": Actions.showSmileCalibration()
                 case "gaze": Actions.showGazeCalibration()
                 case "session": FocusContext.shared.startSession(minutes: 25)
+                case "alert": AlertCenter.shared.simulate(.smile)
+                case "menu": self.statusBar?.openMenu()
+                case "mini": Actions.showDebug(); DebugWindow.setMini(true)
                 default: break
                 }
             }

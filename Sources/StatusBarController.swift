@@ -73,6 +73,10 @@ final class StatusBarController: NSObject, NSMenuDelegate {
 
     // MARK: Menu
 
+    func openMenu() {
+        item.button?.performClick(nil)
+    }
+
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
 
