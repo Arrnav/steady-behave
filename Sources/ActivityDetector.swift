@@ -32,6 +32,7 @@ struct CalmBaseline {
 
     /// True once there is a calibrated value or at least 30 seconds of data.
     var isWarm: Bool { initial != nil || seconds.count >= 30 }
+    var secondsOfData: Int { seconds.count }
 
     mutating func setInitial(_ x: Double) {
         initial = x
@@ -63,13 +64,15 @@ final class ActivityDetector {
         var motionBaseline = 0.0
         var headBaseline = 0.0
         var bodyBaseline = 0.0
+        /// Seconds of data behind each baseline (motion, head, body).
+        var baselineSeconds = (0, 0, 0)
         /// The hand-near-face zone used this frame (normalized, origin bottom-left).
         var handZone: CGRect?
         var overActiveEvents: [EpisodeTracker.Event] = []
         var handsEvents: [EpisodeTracker.Event] = []
         /// True once per hands episode when it has lasted long enough to save a clip.
         var handsClipDue = false
-        /// Over-active alerts wait until the calm baselines have about 30 seconds of data.
+        /// Over-active alerts wait until the motion and head baselines have about 30 seconds of data.
         var warmingUp = false
     }
 
@@ -182,7 +185,8 @@ final class ActivityDetector {
         out.bodyBaseline = body.value
         out.motionRatio = min(10, (Self.mean(motionWindow) ?? motion.value) / motion.value)
         out.headRatio = min(10, (Self.mean(headWindow) ?? head.value) / head.value)
-        out.bodyRatio = min(10, (Self.mean(bodyWindow) ?? body.value) / body.value)
+        // Body pose is an extra signal (shoulders are not always in view): neutral until it has 30 s of data.
+        out.bodyRatio = body.isWarm ? min(10, (Self.mean(bodyWindow) ?? body.value) / body.value) : 1
         out.handFraction = handWindow.isEmpty ? 0 : Double(handWindow.filter { $0.1 }.count) / Double(handWindow.count)
         out.handNear = handNear
 
@@ -194,7 +198,8 @@ final class ActivityDetector {
                          + settings.weightBody * out.bodyRatio + settings.weightHands * handPart) / wSum
         }
 
-        out.warmingUp = !(motion.isWarm && head.isWarm && body.isWarm)
+        out.warmingUp = !(motion.isWarm && head.isWarm)
+        out.baselineSeconds = (motion.secondsOfData, head.secondsOfData, body.secondsOfData)
         if enabled {
             out.overActiveEvents = overActive.update(active: out.score > settings.activityThreshold && !out.warmingUp,
                                                      value: out.score, now: now)

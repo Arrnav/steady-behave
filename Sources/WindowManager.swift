@@ -101,7 +101,13 @@ enum Actions {
     }
 
     static func showSmileCalibration() {
+        if WindowManager.shared.isOpen("smileCalibration") {
+            WindowManager.shared.window("smileCalibration")?.makeKeyAndOrderFront(nil)
+            NSApp.activate()
+            return
+        }
         let controller = SmileCalibrationController()
+        controller.open()
         WindowManager.shared.show("smileCalibration", title: "Calibrate Smile", size: NSSize(width: 760, height: 640),
                                   minSize: NSSize(width: 680, height: 600), onClose: { controller.cancel() }) {
             SmileCalibrationView(controller: controller)

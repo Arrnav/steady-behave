@@ -332,13 +332,17 @@ struct GazeCalibrationView: View {
         case .intro, .retry:
             HStack(spacing: 12) {
                 Button("Cancel") { calibration.close() }
-                Button("Start") { calibration.start() }.keyboardShortcut(.defaultAction)
+                Button("Start") { calibration.start() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
             }
             .controlSize(.large)
         case .result:
             HStack(spacing: 12) {
                 Button("Calibrate Again") { calibration.start() }
-                Button("Done") { calibration.close() }.keyboardShortcut(.defaultAction)
+                Button("Done") { calibration.close() }
+                    .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
             }
             .controlSize(.large)
         default:

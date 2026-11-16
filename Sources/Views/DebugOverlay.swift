@@ -123,15 +123,18 @@ struct DebugOverlay {
                 for p in [l, r] {
                     ctx.fill(Path(ellipseIn: CGRect(x: p.x - 3, y: p.y - 3, width: 6, height: 6)), with: .color(AlertKind.smile.color))
                 }
-                if let width = a.smileFeatures?.first {
+                // Labels only when the preview is big enough to read them.
+                if rect.width >= 560, let width = a.smileFeatures?.first {
                     let mid = CGPoint(x: (l.x + r.x) / 2, y: max(l.y, r.y) + 14)
                     ctx.draw(Text(String(format: "width %.2f", width)).font(.system(size: 10, weight: .medium).monospacedDigit())
                                 .foregroundStyle(AlertKind.smile.color), at: mid)
                 }
-                ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
-                         at: CGPoint(x: l.x, y: l.y - 10))
-                ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
-                         at: CGPoint(x: r.x, y: r.y - 10))
+                if rect.width >= 560 {
+                    ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
+                             at: CGPoint(x: l.x - 14, y: l.y - 10))
+                    ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
+                             at: CGPoint(x: r.x + 14, y: r.y - 10))
+                }
             }
         }
 
@@ -260,6 +263,7 @@ struct DebugOverlay {
     /// The state in words, for the banner over the video.
     static func banner(_ snap: EngineSnapshot, settings: Settings, cameraRunning: Bool) -> (String, Color) {
         if !cameraRunning { return ("Camera off", .secondary) }
+        if snap.calibrating { return ("Calibrating: alerts off", .secondary) }
         if snap.paused { return ("Paused", .secondary) }
         if let quiet = snap.quietReason { return ("Quiet mode (\(quiet))", .secondary) }
         if snap.missedActive { return ("Recording a missed smile", AlertKind.smile.color) }

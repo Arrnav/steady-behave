@@ -310,7 +310,7 @@ struct DebugView: View {
             }
             .font(.callout)
             if a.warmingUp {
-                Label("Learning your calm level. Over-active alerts start after about 30 seconds.", systemImage: "hourglass")
+                Label("Learning your calm level (motion \(a.baselineSeconds.0) s, head \(a.baselineSeconds.1) s of 30). Over-active alerts start after that.", systemImage: "hourglass")
                     .font(.callout).foregroundStyle(.secondary)
             }
             HStack {

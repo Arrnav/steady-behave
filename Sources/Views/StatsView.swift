@@ -59,12 +59,12 @@ struct StatsView: View {
                 GroupBox {
                     rateChart(title: "Smiles per study hour", color: AlertKind.smile.color) { $0.smilesPerHour }
                 } label: {
-                    Label("Smiles", systemImage: AlertKind.smile.symbol)
+                    Label("Smiles per study hour", systemImage: AlertKind.smile.symbol)
                 }
                 GroupBox {
                     rateChart(title: "Look-aways per study hour", color: AlertKind.lookAway.color) { $0.lookAwaysPerHour }
                 } label: {
-                    Label("Looking away", systemImage: AlertKind.lookAway.symbol)
+                    Label("Look-aways per study hour", systemImage: AlertKind.lookAway.symbol)
                 }
                 GroupBox {
                     focusChart
@@ -98,8 +98,9 @@ struct StatsView: View {
 
     private func rateChart(title: String, color: Color, value: @escaping (DayStats) -> Double?) -> some View {
         let days = lastSevenDays
+        let hasData = days.contains { value($0.stats) != nil }
+        let top = max(1, (days.compactMap { value($0.stats) }.max() ?? 0) * 1.2)
         return VStack(alignment: .leading, spacing: 8) {
-            Text(title).font(.callout).foregroundStyle(.secondary)
             Chart(days) { day in
                 if let v = value(day.stats) {
                     BarMark(x: .value("Day", day.label), y: .value(title, v), width: .ratio(0.55))
@@ -118,8 +119,17 @@ struct StatsView: View {
                     AxisValueLabel()
                 }
             }
+            .chartYScale(domain: 0...top)
             .chartYAxisLabel("per hour")
             .frame(height: 160)
+            .overlay {
+                if !hasData {
+                    Text("No day in the last week had 5 minutes of study time yet.")
+                        .font(.callout).foregroundStyle(.secondary)
+                        .padding(.horizontal, 12).padding(.vertical, 6)
+                        .cardBackground(cornerRadius: Metrics.smallCorner)
+                }
+            }
             .accessibilityLabel(title + " for the last 7 days")
         }
         .padding(8)

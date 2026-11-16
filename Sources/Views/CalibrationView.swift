@@ -56,11 +56,16 @@ final class SmileCalibrationController: ObservableObject {
 
     var cameraAvailable: Bool { AppState.shared.cameraAuthorization == .authorized }
 
-    func begin() {
+    /// Called when the window opens: the camera turns on for the preview and alerts pause.
+    func open() {
         active = true
-        relaxed = []; expressions = []; stretchedRaw = []; motion = []
         AppState.shared.calibrationActive = true
         FocusContext.shared.refresh()
+    }
+
+    func begin() {
+        open()
+        relaxed = []; expressions = []; stretchedRaw = []; motion = []
         Engine.shared.calibrationSink.set { [weak self] a in self?.receive(a) }
         startPhase(.getReady(1))
         timer?.invalidate()
@@ -408,6 +413,7 @@ struct SmileCalibrationView: View {
             case .intro:
                 Button("Start Calibration") { controller.begin() }
                     .keyboardShortcut(.defaultAction)
+                    .buttonStyle(.borderedProminent)
                     .disabled(!controller.cameraAvailable)
             case .retry:
                 if controller.retryStep3 {

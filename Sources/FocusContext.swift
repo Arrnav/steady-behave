@@ -79,6 +79,16 @@ final class FocusContext: ObservableObject {
         }
     }
 
+    /// Called when Steady quits: keeps the session's minutes in the stats without showing a summary.
+    func endSessionForQuit() {
+        guard let s = session else { return }
+        session = nil
+        StatsStore.shared.update { d in
+            d.sessions += 1
+            d.sessionMinutes += s.activeSeconds / 60
+        }
+    }
+
     func stopSession(completed: Bool) {
         guard let s = session else { return }
         session = nil
@@ -163,6 +173,7 @@ final class FocusContext: ObservableObject {
         snap.gazeReason = gazeReason
         snap.quietReason = quietReason
         snap.paused = app.isPaused || app.calibrationActive
+        snap.calibrating = app.calibrationActive
         snap.sessionActive = session != nil
         Engine.shared.focus.set(snap)
     }

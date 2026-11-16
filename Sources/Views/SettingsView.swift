@@ -34,7 +34,14 @@ enum SettingsPane: String, CaseIterable, Identifiable {
 }
 
 struct SettingsView: View {
-    @State private var pane: SettingsPane? = .general
+    @State private var pane: SettingsPane? = SettingsView.initialPane
+
+    /// `--pane <name>` at launch picks the first pane shown (used for layout checks).
+    static var initialPane: SettingsPane {
+        let args = CommandLine.arguments
+        if let i = args.firstIndex(of: "--pane"), i + 1 < args.count, let p = SettingsPane(rawValue: args[i + 1]) { return p }
+        return .general
+    }
 
     var body: some View {
         NavigationSplitView {
@@ -127,15 +134,19 @@ private struct GeneralPane: View {
                     Text("90 minutes").tag(90)
                     Text("Open-ended").tag(0)
                 }
-                LabeledContent("Competing response") {
-                    TextField("Competing response", text: $app.settings.competingResponse, axis: .vertical)
-                        .lineLimit(2...4)
-                        .labelsHidden()
-                }
             } header: {
                 Text("Study")
+            }
+            Section {
+                TextField("Competing response", text: $app.settings.competingResponse, axis: .vertical)
+                    .lineLimit(2...4)
+                    .labelsHidden()
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Competing response")
+            } header: {
+                Text("Competing response")
             } footer: {
-                Text("The competing response is the small, calm action shown with each smile alert.")
+                Text("The small, calm action shown with each smile alert.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

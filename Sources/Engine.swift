@@ -14,6 +14,7 @@ struct EngineSnapshot {
     var gazeReason = GazeReason.inactive
     var activity = ActivityDetector.Output()
     var paused = false
+    var calibrating = false
     var quietReason: String?
     var fps = 0.0
     var visionMs = 0.0
@@ -108,6 +109,7 @@ final class Engine {
     private var smileFocusedAtStart = false
     private var cpuWindowStart: (wall: Double, cpu: Double)?
     private var calmMotionLoaded = false
+    private var firstFrameTime: Double?
 
     private init() {
         camera.onFrame = { [weak self] buffer, now in self?.handle(buffer, now: now) }
@@ -211,6 +213,7 @@ final class Engine {
         snap.gazeReason = focus.gazeReason
         snap.activity = act
         snap.paused = paused
+        snap.calibrating = focus.calibrating
         snap.quietReason = focus.quietReason
         snap.fps = Double(fpsCounter.count) / 2
         snap.visionMs = a.processingMs
@@ -353,6 +356,9 @@ final class Engine {
     /// Lowers the frame rate when CPU use runs high with the debug window closed.
     private func adaptPerformance(now: Double, settings: Settings) {
         let cpu = SystemUsage.cpuSeconds()
+        // Start measuring 15 s after the first frame, so start-up work (loading Vision models) doesn't count.
+        if firstFrameTime == nil { firstFrameTime = now }
+        guard now - (firstFrameTime ?? now) >= 15 else { return }
         guard let start = cpuWindowStart else { cpuWindowStart = (now, cpu); return }
         guard now - start.wall >= 10 else { return }
         let percent = 100 * (cpu - start.cpu) / (now - start.wall)

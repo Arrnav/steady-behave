@@ -19,6 +19,11 @@ enum SelfTest {
         check("Clip retention and size cap delete the right files", clipLimits)
         check("Alert cooldown and max 3 repeats", alertRepeats)
         check("Alert cooldown across episodes", alertCooldownAcrossEpisodes)
+        check("Look-away alerts after the grace time", lookAwayGrace)
+        check("Typing mutes look-away alerts", typingMutes)
+        check("Missing face counts as away, then away from desk", missingFace)
+        check("Hand near face zone covers the beard", handZone)
+        check("Upper-body movement raises the activity score", bodyMovement)
         check("Calm baseline follows quiet periods", calmBaseline)
         check("Settings keep defaults for missing keys", settingsMerge)
         check("Haptics loader reports a backend", haptics)
@@ -347,6 +352,110 @@ enum SelfTest {
         guard abs(alerts[0] - 2) < 0.15 else { return "first alert at \(alerts[0])" }
         guard abs(alerts[1] - 32) < 0.15 else { return "second alert at \(alerts[1]), expected after the 30 s cooldown" }
         guard suppressed == 1 else { return "cooldown suppression logged \(suppressed) times" }
+        return nil
+    }
+
+    // MARK: Looking away
+
+    private static func faceFrame(yaw: Double, t: Double) -> FrameAnalysis {
+        var a = FrameAnalysis()
+        a.time = t
+        a.facePresent = true
+        a.yaw = yaw
+        a.faceBox = CGRect(x: 0.35, y: 0.35, width: 0.3, height: 0.4)
+        return a
+    }
+
+    private static func lookAwayGrace() -> String? {
+        let d = AttentionDetector()
+        let settings = Settings()
+        var alerts: [Double] = []
+        var t = 0.0
+        while t < 5 { _ = d.update(analysis: faceFrame(yaw: 0, t: t), model: nil, active: true, typing: false, settings: settings, now: t); t += 1.0 / 15 }
+        let turnedAt = t
+        while t < 40 {
+            let out = d.update(analysis: faceFrame(yaw: 0.8, t: t), model: nil, active: true, typing: false, settings: settings, now: t)
+            for e in out.events { if case .alert = e { alerts.append(t - turnedAt) } }
+            t += 1.0 / 15
+        }
+        guard alerts.count == 3 else { return "expected 3 alerts in 35 s, got \(alerts.count)" }
+        // Smoothing takes a few frames, then the 2.5 s grace time.
+        guard alerts[0] > 2.5, alerts[0] < 3.3 else { return String(format: "first alert after %.2f s", alerts[0]) }
+        guard abs(alerts[1] - alerts[0] - 15) < 0.2 else { return "repeat not 15 s later" }
+        guard d.awaySeconds > 30, d.eyesOnSeconds > 4 else { return "away/on-screen seconds not counted" }
+        return nil
+    }
+
+    private static func typingMutes() -> String? {
+        let d = AttentionDetector()
+        var t = 0.0
+        while t < 10 {
+            let out = d.update(analysis: faceFrame(yaw: 0.8, t: t), model: nil, active: true, typing: true, settings: Settings(), now: t)
+            if out.events.contains(where: { if case .alert = $0 { return true } else { return false } }) { return "alerted while typing" }
+            t += 1.0 / 15
+        }
+        return nil
+    }
+
+    private static func missingFace() -> String? {
+        let d = AttentionDetector()
+        var t = 0.0
+        while t < 3 { _ = d.update(analysis: faceFrame(yaw: 0, t: t), model: nil, active: true, typing: false, settings: Settings(), now: t); t += 1.0 / 15 }
+        var alerted = false
+        var lastState = AttentionDetector.State.onScreen
+        while t < 53 {
+            var a = FrameAnalysis(); a.time = t
+            let out = d.update(analysis: a, model: nil, active: true, typing: false, settings: Settings(), now: t)
+            if out.events.contains(where: { if case .alert = $0 { return true } else { return false } }) { alerted = true }
+            lastState = out.state
+            t += 1.0 / 15
+        }
+        guard alerted else { return "no alert when the face disappeared" }
+        guard lastState == .leftDesk else { return "state after 50 s without a face: \(lastState.rawValue)" }
+        return nil
+    }
+
+    private static func handZone() -> String? {
+        let face = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.3)
+        let zone = ActivityDetector.handZone(for: face)
+        guard zone.contains(CGPoint(x: 0.5, y: 0.33)) else { return "chin and beard area below the face box not covered" }
+        guard zone.contains(CGPoint(x: 0.38, y: 0.5)) else { return "side of the face not covered" }
+        guard !zone.contains(CGPoint(x: 0.5, y: 0.2)) else { return "zone reaches the chest" }
+        let detector = ActivityDetector()
+        var t = 0.0
+        var alerted = false
+        while t < 4 {
+            var a = FrameAnalysis()
+            a.time = t; a.facePresent = true; a.faceBox = face; a.iod = 40
+            a.hands = [HandPose(chirality: 1, joints: ["indexTip": Joint(name: "indexTip", point: CGPoint(x: 0.5, y: 0.35), confidence: 0.9)])]
+            let out = detector.update(analysis: a, enabled: true, settings: Settings(), now: t)
+            if out.handsEvents.contains(where: { if case .alert = $0 { return true } else { return false } }) { alerted = true }
+            t += 1.0 / 15
+        }
+        return alerted ? nil : "no hands-at-face alert after 4 s"
+    }
+
+    private static func bodyMovement() -> String? {
+        let detector = ActivityDetector()
+        var t = 0.0, frame = 0
+        var calmRatio = 0.0, busyRatio = 0.0
+        while t < 80 {
+            var a = FrameAnalysis(); a.time = t
+            if frame % 3 == 1 {
+                // Calm for 60 s (tiny sway), then swaying a lot.
+                let amp = t < 60 ? 0.002 : 0.05
+                let dx = amp * sin(t * 3)
+                a.body = ["leftShoulder": Joint(name: "leftShoulder", point: CGPoint(x: 0.35 + dx, y: 0.3), confidence: 0.9),
+                          "rightShoulder": Joint(name: "rightShoulder", point: CGPoint(x: 0.65 + dx, y: 0.3), confidence: 0.9),
+                          "neck": Joint(name: "neck", point: CGPoint(x: 0.5 + dx, y: 0.32), confidence: 0.9)]
+            }
+            let out = detector.update(analysis: a, enabled: true, settings: Settings(), now: t)
+            if t > 55 && t < 60 { calmRatio = out.bodyRatio }
+            busyRatio = out.bodyRatio
+            t += 1.0 / 15; frame += 1
+        }
+        guard calmRatio > 0.3, calmRatio < 3 else { return String(format: "calm ratio %.2f", calmRatio) }
+        guard busyRatio > 3 else { return String(format: "busy ratio %.2f", busyRatio) }
         return nil
     }
 

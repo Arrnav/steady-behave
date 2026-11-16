@@ -179,6 +179,7 @@ struct FocusSnapshot {
     var gazeReason: GazeReason = .inactive
     var quietReason: String?
     var paused = false
+    var calibrating = false
     var sessionActive = false
     var gazeActive: Bool { gazeReason != .inactive }
 }
