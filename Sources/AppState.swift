@@ -1,0 +1,268 @@
+import AppKit
+import AVFoundation
+import Combine
+import SwiftUI
+
+/// A value guarded by a lock, for state shared between the main thread and the camera queue.
+final class Locked<T> {
+    private var value: T
+    private let lock = NSLock()
+    init(_ value: T) { self.value = value }
+    func get() -> T { lock.lock(); defer { lock.unlock() }; return value }
+    func set(_ newValue: T) { lock.lock(); value = newValue; lock.unlock() }
+    func update(_ change: (inout T) -> Void) { lock.lock(); change(&value); lock.unlock() }
+}
+
+enum Paths {
+    static var support: URL {
+        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let url = base.appendingPathComponent("Steady", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+    static var models: URL { support.appendingPathComponent("models.json") }
+    static var stats: URL { support.appendingPathComponent("stats.json") }
+    static var clips: URL {
+        let url = support.appendingPathComponent("Clips", isDirectory: true)
+        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        return url
+    }
+}
+
+enum SmileMode: String, Codable, CaseIterable, Identifiable {
+    case always, studyOnly
+    var id: String { rawValue }
+    var title: String { self == .always ? "Always while monitoring" : "Only while studying" }
+}
+
+/// Every user setting. Stored as JSON in UserDefaults. New fields fall back to their defaults.
+struct Settings: Codable, Equatable {
+    var cameraID: String?
+
+    // Smile
+    var smileThreshold = 0.75
+    var smileHold = 0.6
+    var smileCooldown = 8.0
+    var smileMaxRepeats = 3
+    var smileMode = SmileMode.always
+
+    // Looking away
+    var gazeThreshold = 0.7
+    var gazeGrace = 2.5
+    var gazeRepeat = 15.0
+    var gazeMaxRepeats = 3
+    var typingSuppression = true
+    var typingWindow = 2.5
+    var autoMode = false
+    var studyApps: [String] = Settings.defaultStudyApps
+    var sessionMinutes = 50
+
+    // Activity
+    var activityThreshold = 2.5
+    var activityHold = 3.0
+    var activityCooldown = 60.0
+    var weightMotion = 1.0
+    var weightHead = 1.0
+    var weightBody = 0.5
+    var weightHands = 1.0
+    var handsHold = 2.0
+    var handsCooldown = 30.0
+    var handsClipAfter = 5.0
+
+    // Alerts
+    var volume = 0.6
+    var soundEnabled: [String: Bool] = [:]
+    var soundNames: [String: String] = [:]
+    var hapticEnabled: [String: Bool] = [:]
+    var competingResponse = "Lips gently together, jaw loose, slow breath out."
+    var quietDuringCalls = true
+    var cameraOffDuringCalls = false
+
+    // Haptics
+    var smileWaveform = 6
+    var lookAwayWaveform = 2
+
+    // Clips
+    var clipsEnabled = true
+    var smileClips = true
+    var clipMinInterval = 180.0
+    var clipsPerDay = 25
+    var clipCapMB = 500
+    var clipRetentionDays = 14
+
+    // Debug and performance
+    var debugMirror = true
+    var debugLayers: [String: Bool] = [:]
+    var debugKeepOnTop = false
+    var adaptivePerformance = true
+
+    static let defaultStudyApps = [
+        "com.jetbrains.rider", "com.microsoft.VSCode", "com.apple.dt.Xcode", "com.apple.Preview",
+        "com.apple.iBooksX", "com.apple.Terminal", "com.azuredatastudio.oss", "org.jkiss.dbeaver.core.product"
+    ]
+
+    static let callApps: [String: String] = [
+        "us.zoom.xos": "Zoom",
+        "com.microsoft.teams2": "Microsoft Teams",
+        "com.microsoft.teams": "Microsoft Teams",
+        "com.apple.FaceTime": "FaceTime",
+        "com.webex.meetingmanager": "Webex",
+        "Cisco-Systems.Spark": "Webex"
+    ]
+
+    func sound(for kind: AlertKind) -> Bool { soundEnabled[kind.rawValue] ?? true }
+    func soundName(for kind: AlertKind) -> String { soundNames[kind.rawValue] ?? kind.defaultSound }
+    func haptic(for kind: AlertKind) -> Bool {
+        hapticEnabled[kind.rawValue] ?? (kind == .smile || kind == .lookAway)
+    }
+    func layer(_ layer: DebugLayer) -> Bool { debugLayers[layer.rawValue] ?? layer.defaultOn }
+
+    /// Decodes by laying stored values over the defaults, so adding a setting never loses the others.
+    static func load(from data: Data?) -> Settings {
+        guard let data,
+              let stored = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let defaultsData = try? JSONEncoder().encode(Settings()),
+              var merged = try? JSONSerialization.jsonObject(with: defaultsData) as? [String: Any]
+        else { return Settings() }
+        for (key, value) in stored { merged[key] = value }
+        guard let mergedData = try? JSONSerialization.data(withJSONObject: merged),
+              let settings = try? JSONDecoder().decode(Settings.self, from: mergedData)
+        else { return Settings() }
+        return settings
+    }
+
+    /// Tuning values exposed in debug mode. "Reset to defaults" restores only these.
+    mutating func resetTuning() {
+        let d = Settings()
+        smileThreshold = d.smileThreshold; smileHold = d.smileHold; smileCooldown = d.smileCooldown
+        gazeThreshold = d.gazeThreshold; gazeGrace = d.gazeGrace; gazeRepeat = d.gazeRepeat
+        activityThreshold = d.activityThreshold; activityHold = d.activityHold; activityCooldown = d.activityCooldown
+        weightMotion = d.weightMotion; weightHead = d.weightHead; weightBody = d.weightBody; weightHands = d.weightHands
+        handsHold = d.handsHold; handsCooldown = d.handsCooldown
+    }
+}
+
+enum DebugLayer: String, CaseIterable, Identifiable {
+    case face, headPose, gaze, hands, handZone, body, motion
+    var id: String { rawValue }
+    var title: String {
+        switch self {
+        case .face: return "Face"
+        case .headPose: return "Head pose"
+        case .gaze: return "Gaze"
+        case .hands: return "Hands"
+        case .handZone: return "Hand zone"
+        case .body: return "Body"
+        case .motion: return "Motion"
+        }
+    }
+    var defaultOn: Bool { self != .motion }
+}
+
+/// Why gaze monitoring is on or off right now.
+enum GazeReason: Equatable {
+    case session
+    case autoApp(String)
+    case inactive
+
+    var label: String {
+        switch self {
+        case .session: return "Study session"
+        case .autoApp(let name): return "Study app: \(name)"
+        case .inactive: return "Inactive"
+        }
+    }
+}
+
+/// What the camera queue needs to know about the focus context, refreshed from the main thread.
+struct FocusSnapshot {
+    var gazeReason: GazeReason = .inactive
+    var quietReason: String?
+    var paused = false
+    var sessionActive = false
+    var gazeActive: Bool { gazeReason != .inactive }
+}
+
+/// App-wide state that lives on the main thread. Background code reads `settingsSnapshot`.
+final class AppState: ObservableObject {
+    static let shared = AppState()
+
+    static let settingsSnapshot = Locked(Settings())
+
+    @Published var settings: Settings {
+        didSet {
+            guard settings != oldValue else { return }
+            AppState.settingsSnapshot.set(settings)
+            saveSettings()
+        }
+    }
+
+    @Published var monitoringEnabled: Bool {
+        didSet { UserDefaults.standard.set(monitoringEnabled, forKey: "monitoringEnabled"); onCameraConditionsChanged?() }
+    }
+    @Published var pausedUntil: Date? { didSet { onCameraConditionsChanged?() } }
+    @Published var quietUntil: Date?
+
+    @Published var cameraAuthorization: AVAuthorizationStatus = AVCaptureDevice.authorizationStatus(for: .video)
+    @Published var cameraRunning = false
+    @Published var cameraName = ""
+
+    @Published var screenLocked = false { didSet { onCameraConditionsChanged?() } }
+    @Published var displayAsleep = false { didSet { onCameraConditionsChanged?() } }
+    @Published var systemAsleep = false { didSet { onCameraConditionsChanged?() } }
+    @Published var callAppFrontmost: String? { didSet { onCameraConditionsChanged?() } }
+    /// Bumped whenever a model is trained, so views refresh.
+    @Published var modelVersion = 0
+
+    /// Calibration windows need the camera even while monitoring is paused.
+    @Published var calibrationActive = false { didSet { onCameraConditionsChanged?() } }
+
+    var onCameraConditionsChanged: (() -> Void)?
+
+    private init() {
+        let loaded = Settings.load(from: UserDefaults.standard.data(forKey: "settings"))
+        settings = loaded
+        AppState.settingsSnapshot.set(loaded)
+        monitoringEnabled = UserDefaults.standard.object(forKey: "monitoringEnabled") as? Bool ?? true
+    }
+
+    private func saveSettings() {
+        if let data = try? JSONEncoder().encode(settings) {
+            UserDefaults.standard.set(data, forKey: "settings")
+        }
+    }
+
+    var isPaused: Bool {
+        if !monitoringEnabled { return true }
+        if let until = pausedUntil, until > Date() { return true }
+        return false
+    }
+
+    var isQuietManual: Bool {
+        if let until = quietUntil, until > Date() { return true }
+        return false
+    }
+
+    /// The camera runs only when there is a reason for it and nothing says it must be off.
+    var cameraShouldRun: Bool {
+        guard cameraAuthorization == .authorized else { return false }
+        if screenLocked || displayAsleep || systemAsleep { return false }
+        if calibrationActive { return true }
+        if isPaused { return false }
+        if settings.cameraOffDuringCalls && callAppFrontmost != nil { return false }
+        return true
+    }
+
+    func pause(for seconds: TimeInterval?) {
+        if let seconds {
+            pausedUntil = Date().addingTimeInterval(seconds)
+        } else {
+            pausedUntil = .distantFuture
+        }
+    }
+
+    func resume() {
+        pausedUntil = nil
+        if !monitoringEnabled { monitoringEnabled = true }
+    }
+}
