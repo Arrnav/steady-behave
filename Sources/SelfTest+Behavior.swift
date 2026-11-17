@@ -184,6 +184,16 @@ extension SelfTest {
         for kind in AlertKind.allCases { settings.detectionEnabled[kind.rawValue] = false }
         let off = DetectionGates(settings: settings, focus: focus)
         guard !off.smile, !off.lookAway, !off.overActive, !off.hands else { return "a switched-off detection still runs" }
+        var inputSettings = Settings()
+        let typingDefault = DetectionGates(settings: inputSettings, focus: focus, inputActive: true)
+        guard typingDefault.inputPaused == [.lookAway], typingDefault.smile, typingDefault.overActive, typingDefault.hands else {
+            return "by default only looking away should pause during input"
+        }
+        inputSettings.inputPauses[AlertKind.smile.rawValue] = true
+        inputSettings.inputPauses[AlertKind.lookAway.rawValue] = false
+        let typingCustom = DetectionGates(settings: inputSettings, focus: focus, inputActive: true)
+        guard !typingCustom.smile, typingCustom.inputPaused == [.smile] else { return "custom input pauses were not applied" }
+        guard DetectionGates(settings: inputSettings, focus: focus, inputActive: false).smile else { return "smile stayed paused without input" }
         focus.paused = true
         let paused = DetectionGates(settings: Settings(), focus: focus)
         guard !paused.smile, !paused.lookAway, !paused.overActive, !paused.hands else { return "a detection runs while paused" }

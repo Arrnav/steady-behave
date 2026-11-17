@@ -24,6 +24,7 @@ struct EngineSnapshot {
     var clipFrames = 0
     var quality = CameraQuality.balanced
     var idle = false
+    var inputPaused: [AlertKind] = []
 }
 
 /// Which detections run on a frame. Decided in one place from settings and the focus context.
@@ -33,12 +34,24 @@ struct DetectionGates: Equatable {
     var overActive = false
     var hands = false
 
-    init(settings: Settings, focus: FocusSnapshot) {
+    /// Detections paused because the keyboard or mouse is in use.
+    var inputPaused: [AlertKind] = []
+
+    init(settings: Settings, focus: FocusSnapshot, inputActive: Bool = false) {
         let live = !focus.paused
-        smile = live && settings.detects(.smile) && (settings.smileMode == .always || focus.gazeActive)
-        lookAway = live && settings.detects(.lookAway) && focus.gazeActive
-        overActive = live && settings.detects(.overActive)
-        hands = live && settings.detects(.handsAtFace)
+        let wouldRun: [AlertKind: Bool] = [
+            .smile: live && settings.detects(.smile) && (settings.smileMode == .always || focus.gazeActive),
+            .lookAway: live && settings.detects(.lookAway) && focus.gazeActive,
+            .overActive: live && settings.detects(.overActive),
+            .handsAtFace: live && settings.detects(.handsAtFace)
+        ]
+        // Only detections that would otherwise run count as paused by input.
+        inputPaused = AlertKind.allCases.filter { inputActive && settings.pausesOnInput($0) && wouldRun[$0] == true }
+        smile = wouldRun[.smile] == true && !inputPaused.contains(.smile)
+        // Look-away keeps running during input, so eyes-on time is still counted; input counts as on-task.
+        lookAway = wouldRun[.lookAway] == true
+        overActive = wouldRun[.overActive] == true && !inputPaused.contains(.overActive)
+        hands = wouldRun[.handsAtFace] == true && !inputPaused.contains(.handsAtFace)
     }
 }
 
@@ -127,7 +140,7 @@ final class Engine {
     private var lastAlert: (kind: AlertKind, t: Double)?
     private var missedUntil: Double?
     private var missedSamples: [[Double]] = []
-    private var typingLogged = false
+    private var inputPauseLogged = false
     private var lastStatsFlush = -Double.infinity
     private var focusedAccum = 0.0
     private var lastFrameTime: Double?
@@ -171,7 +184,8 @@ final class Engine {
         handEvery = max(quality.poseEvery, poseEveryFloor)
 
         // Hand and body pose only run when a detection (or the debug preview) uses them.
-        let gates = DetectionGates(settings: settings, focus: focus)
+        let inputActive = InputActivity.isActive(settings: settings)
+        let gates = DetectionGates(settings: settings, focus: focus, inputActive: inputActive)
         let preview = previewConsumers.get() > 0
         let needHands = gates.hands || preview
         let needBody = (gates.overActive && settings.weightBody > 0) || preview
@@ -193,7 +207,7 @@ final class Engine {
             wasPaused = paused
         }
 
-        let typing = Self.secondsSinceInput() < settings.typingWindow
+        let typing = gates.inputPaused.contains(.lookAway)
         let s = smile.update(features: a.smileFeatures, model: models.smile, enabled: gates.smile, settings: settings, now: now)
         let g = attention.update(analysis: a, model: models.gaze, active: gates.lookAway,
                                  typing: typing, settings: settings, now: now)
@@ -201,7 +215,14 @@ final class Engine {
                                   settings: settings, now: now)
 
         handleSmile(s.events, value: s.smoothed, focus: focus, settings: settings, now: now)
-        handleGaze(g, gazeOn: gates.lookAway, focus: focus, settings: settings, now: now)
+        handleGaze(g, focus: focus, settings: settings, now: now)
+        if gates.inputPaused.isEmpty {
+            inputPauseLogged = false
+        } else if !inputPauseLogged {
+            inputPauseLogged = true
+            EventLog.shared.add(.suppressed, nil, "Keyboard or mouse in use, paused: "
+                                + gates.inputPaused.map(\.title).joined(separator: ", "))
+        }
         handleActivity(act, focus: focus, settings: settings, now: now)
 
         // Feedback windows.
@@ -263,6 +284,7 @@ final class Engine {
         snap.handEvery = handEvery
         snap.missedActive = missedUntil != nil
         snap.quality = quality
+        snap.inputPaused = gates.inputPaused
         snap.idle = idle
         snap.clipFrames = clips.bufferedFrames
         snapshot.set(snap)
@@ -298,15 +320,7 @@ final class Engine {
         }
     }
 
-    private func handleGaze(_ g: AttentionDetector.Output, gazeOn: Bool, focus: FocusSnapshot, settings: Settings, now: Double) {
-        if g.typing, gazeOn, let raw = g.raw, raw > settings.gazeThreshold {
-            if !typingLogged {
-                typingLogged = true
-                EventLog.shared.add(.suppressed, .lookAway, "Typing or using the mouse")
-            }
-        } else if !g.typing {
-            typingLogged = false
-        }
+    private func handleGaze(_ g: AttentionDetector.Output, focus: FocusSnapshot, settings: Settings, now: Double) {
         for e in g.events {
             switch e {
             case .started:
@@ -416,12 +430,6 @@ final class Engine {
             fpsCap = 15; poseEveryFloor = 3
             EventLog.shared.add(.info, nil, String(format: "CPU at %.0f%%, back to the full frame rate", percent))
         }
-    }
-
-    /// Seconds since the last keyboard or mouse event. Needs no Input Monitoring permission.
-    static func secondsSinceInput() -> Double {
-        guard let any = CGEventType(rawValue: ~0) else { return .infinity }
-        return CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: any)
     }
 
     // MARK: Feedback (called from the main thread)

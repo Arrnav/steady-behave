@@ -42,7 +42,7 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 - Episodes are counted in stats when the hold time is reached, even if the alert itself is held back by the cooldown.
 - Which detections run on a frame is decided in one place, `DetectionGates`, from the settings, the pause state and the focus context. A detection that is switched off gives no alerts, stats or clips. With hands-at-face off, hands near the face also stop raising the activity score.
 - No face for up to 30 s after a face was seen counts as looking away. From 30 to 45 s it counts as neither. After 45 s it is "away from desk": alerts stop and the session timer pauses.
-- Typing suppression uses `CGEventSource.secondsSinceLastEventType`, which reports only the time since the last input event and needs no Input Monitoring permission.
+- Keyboard and trackpad use are read with `CGEventSource.secondsSinceLastEventType`, which reports only the time since the last event and needs no Input Monitoring permission. Keyboard and mouse can be watched separately, and each detection can be set to pause during input or keep running. By default only looking away pauses; the others keep catching habits while typing. During input, look-away keeps running but counts the time as on screen.
 - The edge glow uses an even-odd shape to cut out the notch. A blend-mode mask rendered correctly offscreen but did not composite in a live window.
 - Alert colors can be changed per type. Resolved colors are cached and refreshed when settings change, so drawing code can read them cheaply.
 

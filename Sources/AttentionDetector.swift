@@ -74,8 +74,8 @@ final class AttentionDetector {
             }
         }
 
-        if typing && settings.typingSuppression {
-            // Looking at the keyboard while typing is on-task.
+        if typing {
+            // Looking at the keyboard or trackpad while using them is on-task.
             p = 0
             out.typing = true
         }

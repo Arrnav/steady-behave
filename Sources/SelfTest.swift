@@ -30,7 +30,7 @@ enum SelfTest {
         check("Deleting data clears models and stats", deleteData)
         check("Alert colors survive a hex round trip", colorHex)
         check("A detection that is off never alerts", detectionOff)
-        check("Detections run only when switched on and not paused", detectionGates)
+        check("Detections run only when switched on, not paused and not held by input", detectionGates)
         check("Smoothing reacts at the same speed at any frame rate", smoothingSpeed)
         check("Haptics loader reports a backend", haptics)
         print(failures == 0 ? "All checks passed" : "\(failures) check(s) did not pass")

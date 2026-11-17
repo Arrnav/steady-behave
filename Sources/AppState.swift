@@ -84,8 +84,6 @@ struct Settings: Codable, Equatable {
     var gazeGrace = 2.5
     var gazeRepeat = 15.0
     var gazeMaxRepeats = 3
-    var typingSuppression = true
-    var typingWindow = 2.5
     var autoMode = false
     var studyApps: [String] = Settings.defaultStudyApps
     var sessionMinutes = 50
@@ -101,6 +99,16 @@ struct Settings: Codable, Equatable {
     var handsHold = 2.0
     var handsCooldown = 30.0
     var handsClipAfter = 5.0
+
+    // Keyboard and mouse
+    /// Pause some detections while the keyboard or mouse is in use.
+    var typingSuppression = true
+    var inputKeyboard = true
+    var inputMouse = true
+    /// Seconds after the last input event that still count as "in use".
+    var typingWindow = 2.5
+    /// Which detections pause during input. Missing keys: only looking away pauses.
+    var inputPauses: [String: Bool] = [:]
 
     /// Each detection can be switched off on its own. Missing keys mean on.
     var detectionEnabled: [String: Bool] = [:]
@@ -149,6 +157,7 @@ struct Settings: Codable, Equatable {
     ]
 
     func detects(_ kind: AlertKind) -> Bool { detectionEnabled[kind.rawValue] ?? true }
+    func pausesOnInput(_ kind: AlertKind) -> Bool { inputPauses[kind.rawValue] ?? (kind == .lookAway) }
     func sound(for kind: AlertKind) -> Bool { soundEnabled[kind.rawValue] ?? true }
     func soundName(for kind: AlertKind) -> String { soundNames[kind.rawValue] ?? kind.defaultSound }
     func haptic(for kind: AlertKind) -> Bool {

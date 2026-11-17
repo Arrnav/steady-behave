@@ -262,15 +262,14 @@ struct DebugOverlay {
         if let quiet = snap.quietReason { return ("Quiet mode (\(quiet))", .secondary) }
         if snap.missedActive { return ("Recording a missed smile", AlertKind.smile.color) }
         if snap.smile.held > 0 { return (String(format: "Smile detected %.1f s", snap.smile.held), AlertKind.smile.color) }
-        if snap.gaze.typing && snap.gazeReason != .inactive && (snap.gaze.raw ?? 0) > settings.gazeThreshold {
-            return ("Typing: alerts muted", .secondary)
+        if !snap.inputPaused.isEmpty {
+            return ("Keyboard or mouse in use: " + snap.inputPaused.map(\.title).joined(separator: ", ") + " paused", .secondary)
         }
         if snap.gaze.held > 0 { return (String(format: "Looking away %.1f s", snap.gaze.held), AlertKind.lookAway.color) }
         if snap.gaze.state == .leftDesk { return ("Away from desk", .secondary) }
         if snap.activity.handNear { return ("Hand near face", AlertKind.handsAtFace.color) }
         if snap.activity.score > settings.activityThreshold { return ("Moving a lot", AlertKind.overActive.color) }
         if snap.analysis?.facePresent == false { return ("No face in view", .secondary) }
-        if snap.gaze.typing && snap.gazeReason != .inactive { return ("Typing: alerts muted", .secondary) }
         return ("Watching", .green)
     }
 }

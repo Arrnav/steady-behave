@@ -75,6 +75,11 @@ extension AppState {
                 set: { self.setDetection(kind, enabled: $0) })
     }
 
+    func inputPauseBinding(_ kind: AlertKind) -> Binding<Bool> {
+        Binding(get: { self.settings.pausesOnInput(kind) },
+                set: { self.settings.inputPauses[kind.rawValue] = $0 })
+    }
+
     func colorBinding(_ kind: AlertKind) -> Binding<Color> {
         Binding(get: { kind.color },
                 set: { color in
@@ -129,11 +134,10 @@ private struct GeneralPane: View {
                 }))
             }
             Section {
-                ForEach(AlertKind.allCases) { kind in
-                    Toggle(isOn: app.detectionBinding(kind)) {
-                        Label(kind.detectionTitle, systemImage: kind.symbol)
-                    }
-                }
+                kindToggle(.smile, isOn: app.detectionBinding(.smile))
+                kindToggle(.lookAway, isOn: app.detectionBinding(.lookAway))
+                kindToggle(.overActive, isOn: app.detectionBinding(.overActive))
+                kindToggle(.handsAtFace, isOn: app.detectionBinding(.handsAtFace))
             } header: {
                 Text("Detections")
             } footer: {
@@ -170,6 +174,32 @@ private struct GeneralPane: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
+                Toggle("Pause detection while I use the Mac", isOn: $app.settings.typingSuppression)
+                Group {
+                    Toggle("Keyboard", isOn: $app.settings.inputKeyboard)
+                    Toggle("Mouse and trackpad", isOn: $app.settings.inputMouse)
+                    SliderRow(title: "Pause for", value: $app.settings.typingWindow, range: 0.5...10, format: "%.1f s")
+                }
+                .disabled(!app.settings.typingSuppression)
+            } header: {
+                Text("Keyboard and Trackpad")
+            } footer: {
+                Text("The pause lasts this long after the last key press or pointer movement.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
+                kindToggle(.smile, isOn: app.inputPauseBinding(.smile))
+                kindToggle(.lookAway, isOn: app.inputPauseBinding(.lookAway))
+                kindToggle(.overActive, isOn: app.inputPauseBinding(.overActive))
+                kindToggle(.handsAtFace, isOn: app.inputPauseBinding(.handsAtFace))
+            } header: {
+                Text("Pause These Detections")
+            } footer: {
+                Text("Leave a detection unpaused to keep catching it while you type or use the trackpad.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            .disabled(!app.settings.typingSuppression)
+            Section {
                 Picker("Session length", selection: $app.settings.sessionMinutes) {
                     Text("25 minutes").tag(25)
                     Text("50 minutes").tag(50)
@@ -201,6 +231,14 @@ private struct GeneralPane: View {
             }
         }
         .onAppear { devices = CameraService.availableDevices(); loginOn = LoginItem.isEnabled }
+    }
+
+    /// Rows are written out one by one: a ForEach as the content of a grouped section
+    /// drew its last row outside the section box.
+    private func kindToggle(_ kind: AlertKind, isOn: Binding<Bool>) -> some View {
+        Toggle(isOn: isOn) {
+            Label(kind.detectionTitle, systemImage: kind.symbol)
+        }
     }
 
     private var cameraStatus: String {
@@ -305,11 +343,10 @@ private struct GazePane: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
-                Toggle("Mute while typing or using the mouse", isOn: $app.settings.typingSuppression)
-                SliderRow(title: "Input window", value: $app.settings.typingWindow, range: 0.5...10, format: "%.1f s")
+                Toggle("Pause while typing or using the trackpad", isOn: app.inputPauseBinding(.lookAway))
                     .disabled(!app.settings.typingSuppression)
             } footer: {
-                Text("Looking down at the keyboard while typing counts as on-task.")
+                Text("While paused, looking at the keyboard or trackpad counts as on screen. Choose the inputs in General, Keyboard and Trackpad.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {

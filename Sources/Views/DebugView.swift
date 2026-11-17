@@ -293,7 +293,7 @@ struct DebugView: View {
             }
             .font(.callout)
             if g.typing {
-                Label("Typing or mouse input in the last \(String(format: "%.1f", app.settings.typingWindow)) s",
+                Label("Keyboard or mouse used in the last \(String(format: "%.1f", app.settings.typingWindow)) s, counted as on screen",
                       systemImage: "keyboard")
                     .font(.callout).foregroundStyle(.secondary)
             }
