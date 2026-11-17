@@ -217,6 +217,55 @@ extension SelfTest {
         return nil
     }
 
+    static func escalationSteps() -> String? {
+        var tracker = EscalationTracker()
+        let settings = Settings()
+        var decisions: [EscalationTracker.Decision] = []
+        for i in 0..<7 { decisions.append(tracker.record(.smile, now: Double(i) * 30, settings: settings)) }
+        guard !decisions[0].blur, !decisions[1].blur, decisions[2].blur else { return "blur did not start at the 3rd alert" }
+        guard decisions[..<4].allSatisfy({ !$0.speak }), decisions[4].speak else { return "speech did not start at the 5th alert" }
+        guard !decisions[5].speak, !decisions[6].speak else { return "speech repeated inside the 5 minute cooldown" }
+        let text = EscalationTracker.sentence(for: .smile, decision: decisions[4], minutes: 10, competingResponse: "Lips together.")
+        guard text == "5 stretched smiles in the last 10 minutes. Lips together." else { return "sentence: \(text)" }
+        return nil
+    }
+
+    static func escalationMixed() -> String? {
+        var tracker = EscalationTracker()
+        let settings = Settings()
+        let kinds: [AlertKind] = [.smile, .lookAway, .overActive, .handsAtFace, .smile, .lookAway]
+        var last = EscalationTracker.Decision()
+        for (i, kind) in kinds.enumerated() { last = tracker.record(kind, now: Double(i) * 20, settings: settings) }
+        guard last.blur, last.combined, last.totalCount == 6 else { return "six mixed alerts did not blur" }
+        // Eleven minutes later the old alerts have left the 10 minute window.
+        let later = tracker.record(.smile, now: 660 + 120, settings: settings)
+        guard !later.blur, later.totalCount == 1 else { return "old alerts still counted (\(later.totalCount))" }
+        var off = Settings()
+        off.blurEnabled = false
+        off.speakEnabled = false
+        var quiet = EscalationTracker()
+        for i in 0..<10 {
+            let d = quiet.record(.lookAway, now: Double(i), settings: off)
+            if d.blur || d.speak { return "escalated while switched off" }
+        }
+        return nil
+    }
+
+    static func escalationTolerance() -> String? {
+        var settings = Settings()
+        settings.escalationTolerance = 5
+        guard settings.blurAfter == 5, settings.speakAfter == 7, settings.combinedAfter == 10 else { return "tolerance mapping" }
+        var tracker = EscalationTracker()
+        for i in 0..<4 { _ = tracker.record(.handsAtFace, now: Double(i), settings: settings) }
+        guard !tracker.record(.handsAtFace, now: 4, settings: { var s = settings; s.blurAfter = 6; return s }()).blur else {
+            return "blurred before the threshold"
+        }
+        let counts = tracker.counts(now: 10, settings: settings)
+        guard counts[.handsAtFace] == 5, counts[.smile] == nil else { return "meter counts \(counts)" }
+        guard tracker.counts(now: 10 + 11 * 60, settings: settings).isEmpty else { return "meter kept expired alerts" }
+        return nil
+    }
+
     static func haptics() -> String? {
         let backend = Haptics.shared.backend
         print("      haptic backend: \(backend.rawValue) \(Haptics.shared.detail)")

@@ -33,7 +33,7 @@ SOURCES=$(find Sources -name '*.swift' | sort)
 swiftc -O -swift-version 5 -target arm64-apple-macos14.0 \
     -framework AppKit -framework SwiftUI -framework AVFoundation -framework AVKit \
     -framework Vision -framework CoreImage -framework CoreMedia -framework CoreVideo \
-    -framework Carbon -framework ServiceManagement -framework Charts -framework IOKit \
+    -framework Carbon -framework ServiceManagement -framework Charts -framework IOKit -framework CoreAudio \
     -o "$BIN" $SOURCES
 
 cp Info.plist "$APP/Contents/Info.plist"

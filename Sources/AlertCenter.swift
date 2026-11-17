@@ -15,11 +15,13 @@ final class AlertCenter {
         return names.isEmpty ? ["Basso", "Frog", "Glass", "Pop", "Purr", "Submarine", "Tink"] : names
     }()
 
-    func fire(_ kind: AlertKind, quiet: Bool) {
+    /// Shows an alert. Real alerts also count toward escalation; test alerts don't.
+    func fire(_ kind: AlertKind, quiet: Bool, escalate: Bool = true) {
         let settings = AppState.shared.settings
         let subtitle = kind == .smile ? settings.competingResponse : nil
         OverlayController.shared.flash(kind, title: kind.overlayText, subtitle: subtitle, quiet: quiet)
         onFlash?(kind)
+        if escalate { EscalationCenter.shared.alertFired(kind, quiet: quiet) }
         // Quiet mode (calls or the quiet hour) keeps only a small, faint visual.
         guard !quiet else { return }
         if settings.sound(for: kind) {
@@ -34,7 +36,7 @@ final class AlertCenter {
     func simulate(_ kind: AlertKind) {
         EventLog.shared.add(.info, kind, "Simulated alert")
         Engine.shared.markers.update { $0.append(AlertMarker(t: monotonicNow(), kind: kind)) }
-        fire(kind, quiet: FocusContext.shared.quietReason != nil)
+        fire(kind, quiet: FocusContext.shared.quietReason != nil, escalate: false)
     }
 
     func playSound(_ name: String, volume: Float) {

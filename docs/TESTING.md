@@ -40,5 +40,7 @@ Run these on a MacBook with a built-in camera after `./build.sh --run`.
 11. **Haptics.** Settings > Haptics plays waveforms 1 to 6.
 12. **Clips and stats.** The Clips window lists saved clips with thumbnails and plays them at 0.5x and 1x. The Stats window shows today's counts.
 13. **Camera quality.** Switch Settings > General > Camera > Quality and check the debug window's Quality and Frames per second readouts. Unplug the charger: within 10 seconds Battery Saver is in use. Step out of view for 10 seconds: the readout shows Idle.
-14. **Calls.** With FaceTime, Zoom or Teams in front, alerts are silent and fainter.
-15. **Camera off.** Pausing, locking the screen and sleeping each turn the camera light off; it comes back afterwards.
+14. **Repeated habits.** Settings > Repeated Habits: Test Blur blurs the screen for a moment without blocking clicks; Test Voice speaks a sample reminder. Trigger the same habit three times within 10 minutes and the screen blurs until it stops.
+15. **Keyboard and trackpad.** Settings > General > Keyboard and Trackpad: with Stretched Smile not paused, a smile while typing still alerts; with it paused, it doesn't.
+16. **Calls.** With FaceTime, Zoom or Teams in front, alerts are silent and fainter.
+17. **Camera off.** Pausing, locking the screen and sleeping each turn the camera light off; it comes back afterwards.

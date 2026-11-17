@@ -124,6 +124,22 @@ struct Settings: Codable, Equatable {
     var quietDuringCalls = true
     var cameraOffDuringCalls = false
 
+    // When a habit keeps repeating
+    var escalationWindowMinutes = 10.0
+    var blurEnabled = true
+    var blurAfter = 3
+    var combinedAfter = 6
+    var blurStrength = 0.6
+    var blurSeconds = 6.0
+    var speakEnabled = true
+    var speakAfter = 5
+    var speakCooldownMinutes = 5.0
+    var voiceID: String?
+    /// Separate from alert sounds, so the spoken reminder can stay quiet.
+    var speechVolume = 0.5
+    /// Avoids speaking out loud through the Mac's own speakers.
+    var speakOnlyWithHeadphones = true
+
     // Haptics
     var smileWaveform = 6
     var lookAwayWaveform = 2
@@ -155,6 +171,17 @@ struct Settings: Codable, Equatable {
         "com.webex.meetingmanager": "Webex",
         "Cisco-Systems.Spark": "Webex"
     ]
+
+    /// One "tolerance" value that sets every escalation threshold: blur after N alerts for one habit,
+    /// a spoken reminder after N + 2, and a blur after 2N alerts of any kind.
+    var escalationTolerance: Int {
+        get { blurAfter }
+        set {
+            blurAfter = newValue
+            speakAfter = newValue + 2
+            combinedAfter = newValue * 2
+        }
+    }
 
     func detects(_ kind: AlertKind) -> Bool { detectionEnabled[kind.rawValue] ?? true }
     func pausesOnInput(_ kind: AlertKind) -> Bool { inputPauses[kind.rawValue] ?? (kind == .lookAway) }

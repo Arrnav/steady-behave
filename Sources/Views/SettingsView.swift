@@ -3,7 +3,7 @@ import AVFoundation
 import SwiftUI
 
 enum SettingsPane: String, CaseIterable, Identifiable {
-    case general, smile, gaze, activity, alerts, haptics, clips, privacy
+    case general, smile, gaze, activity, alerts, repeating, haptics, clips, privacy
     var id: String { rawValue }
 
     var title: String {
@@ -13,6 +13,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .gaze: return "Looking Away"
         case .activity: return "Activity"
         case .alerts: return "Alerts"
+        case .repeating: return "Repeated Habits"
         case .haptics: return "Haptics"
         case .clips: return "Clips"
         case .privacy: return "Privacy and Data"
@@ -26,6 +27,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
         case .gaze: return "eyes"
         case .activity: return "figure.walk.motion"
         case .alerts: return "bell"
+        case .repeating: return "arrow.clockwise.circle"
         case .haptics: return "hand.tap"
         case .clips: return "film"
         case .privacy: return "lock.shield"
@@ -57,6 +59,7 @@ struct SettingsView: View {
                 case .gaze: GazePane()
                 case .activity: ActivityPane()
                 case .alerts: AlertsPane()
+                case .repeating: RepeatedHabitsPane()
                 case .haptics: HapticsPane()
                 case .clips: ClipsPane()
                 case .privacy: PrivacyPane()

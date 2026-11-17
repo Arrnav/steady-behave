@@ -32,6 +32,9 @@ enum SelfTest {
         check("A detection that is off never alerts", detectionOff)
         check("Detections run only when switched on, not paused and not held by input", detectionGates)
         check("Smoothing reacts at the same speed at any frame rate", smoothingSpeed)
+        check("Repeated alerts escalate to blur, then speech", escalationSteps)
+        check("Mixed habits escalate together, old alerts expire", escalationMixed)
+        check("Tolerance sets the thresholds and the meter counts", escalationTolerance)
         check("Haptics loader reports a backend", haptics)
         print(failures == 0 ? "All checks passed" : "\(failures) check(s) did not pass")
         return failures == 0 ? 0 : 1

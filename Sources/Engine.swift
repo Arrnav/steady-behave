@@ -315,6 +315,7 @@ final class Engine {
                 EventLog.shared.add(.suppressed, .smile, "Cooldown")
             case .ended(let duration, _, let peak):
                 EventLog.shared.add(.ended, .smile, "Smile episode", peak: peak, duration: duration)
+                Self.notifyEnded(.smile)
                 DispatchQueue.main.async { StatsStore.shared.update { $0.smileSeconds += duration } }
             }
         }
@@ -332,6 +333,7 @@ final class Engine {
                 EventLog.shared.add(.suppressed, .lookAway, "Cooldown")
             case .ended(let duration, _, let peak):
                 EventLog.shared.add(.ended, .lookAway, "Back on screen", peak: peak, duration: duration)
+                Self.notifyEnded(.lookAway)
             }
         }
     }
@@ -349,6 +351,7 @@ final class Engine {
                 EventLog.shared.add(.suppressed, .overActive, "Cooldown")
             case .ended(let duration, _, let peak):
                 EventLog.shared.add(.ended, .overActive, "Settled", peak: peak, duration: duration)
+                Self.notifyEnded(.overActive)
             }
         }
         for e in act.handsEvents {
@@ -362,6 +365,7 @@ final class Engine {
                 EventLog.shared.add(.suppressed, .handsAtFace, "Cooldown")
             case .ended(let duration, _, let peak):
                 EventLog.shared.add(.ended, .handsAtFace, "Hands down", peak: peak, duration: duration)
+                Self.notifyEnded(.handsAtFace)
             }
         }
         if act.handsClipDue { triggerClip(.handsAtFace, settings: settings, now: now) }
@@ -375,6 +379,10 @@ final class Engine {
         EventLog.shared.add(.alert, kind, message)
         let quiet = focus.quietReason != nil
         DispatchQueue.main.async { AlertCenter.shared.fire(kind, quiet: quiet) }
+    }
+
+    private static func notifyEnded(_ kind: AlertKind) {
+        DispatchQueue.main.async { EscalationCenter.shared.episodeEnded(kind) }
     }
 
     private func triggerClip(_ kind: AlertKind, settings: Settings, now: Double) {

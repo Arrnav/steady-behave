@@ -101,6 +101,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "session": FocusContext.shared.startSession(minutes: 25)
                 case "alert": AlertCenter.shared.simulate(.smile)
                 case "pause": self.app.pause(for: nil); FocusContext.shared.refresh()
+                case "blur": EscalationCenter.shared.testBlur()
+                case "voice": EscalationCenter.shared.testVoice()
                 case "menu": self.statusBar?.openMenu()
                 case "mini": Actions.showDebug(); DebugWindow.setMini(true)
                 default: break

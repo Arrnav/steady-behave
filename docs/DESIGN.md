@@ -46,6 +46,15 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 - The edge glow uses an even-odd shape to cut out the notch. A blend-mode mask rendered correctly offscreen but did not composite in a live window.
 - Alert colors can be changed per type. Resolved colors are cached and refreshed when settings change, so drawing code can read them cheaply.
 
+## Escalation
+
+- Real alerts (not test alerts) are kept for a look-back window, 10 minutes by default. The 3rd alert for one habit, or the 6th of any kind, blurs the screen; the 5th for one habit (or 8th of any kind) is spoken, at most every 5 minutes. Counting is a pure `EscalationTracker`, tested with a fake clock.
+- The blur is a click-through window with a behind-window `NSVisualEffectView`, one level below the alert glow so the glow and label stay sharp. Its strength is the window's opacity. It clears when the habit's episode ends (after at least 1.5 s) or after its time limit.
+- One tolerance value N sets the thresholds together: blur after N alerts for a habit, speech after N + 2, blur after 2N of any kind. Each can still be changed on its own, and a live meter shows the current counts.
+- Speech uses `AVSpeechSynthesizer`, which runs on the Mac. Apps can't make Siri speak or use Siri voices, so the picker lists the standard and any downloaded Enhanced or Premium system voices. The automatic choice is the best-quality female voice installed.
+- Speech has its own volume and, by default, only plays when the output is Bluetooth audio or wired headphones (read from Core Audio: transport type, or the built-in output's "hdpn" data source). Test Voice always plays.
+- Quiet mode (calls, quiet hour) never escalates.
+
 ## Activity
 
 - The activity score is a weighted average of ratios to calm: motion, head speed, upper-body movement, and `1 + 4 × hand-near-face fraction`. A calm moment scores about 1, so a threshold of 2.5 means "2.5 times calm".
@@ -74,4 +83,4 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 ## Developer flags
 
 - `--selftest` runs the checks and exits with 0 or 1.
-- `--show` opens windows or triggers actions at launch, for checking layouts: `debug`, `mini`, `settings`, `clips`, `stats`, `smile`, `gaze`, `menu`, `alert`, `session`, `pause`. `--pane <name>` picks the first Settings pane, and `--quality high|balanced|batterySaver` overrides the camera quality without saving it.
+- `--show` opens windows or triggers actions at launch, for checking layouts: `debug`, `mini`, `settings`, `clips`, `stats`, `smile`, `gaze`, `menu`, `alert`, `session`, `pause`, `blur`, `voice`. `--pane <name>` picks the first Settings pane, and `--quality high|balanced|batterySaver` overrides the camera quality without saving it.
