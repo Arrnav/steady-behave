@@ -1,3 +1,4 @@
+import AppKit
 import AVFoundation
 import CoreVideo
 import Foundation
@@ -27,6 +28,10 @@ enum SelfTest {
         check("Calm baseline follows quiet periods", calmBaseline)
         check("Settings keep defaults for missing keys", settingsMerge)
         check("Deleting data clears models and stats", deleteData)
+        check("Alert colors survive a hex round trip", colorHex)
+        check("A detection that is off never alerts", detectionOff)
+        check("Detections run only when switched on and not paused", detectionGates)
+        check("Smoothing reacts at the same speed at any frame rate", smoothingSpeed)
         check("Haptics loader reports a backend", haptics)
         print(failures == 0 ? "All checks passed" : "\(failures) check(s) did not pass")
         return failures == 0 ? 0 : 1
@@ -44,7 +49,7 @@ enum SelfTest {
         }
     }
 
-    private static func tempDir() -> URL {
+    static func tempDir() -> URL {
         let url = FileManager.default.temporaryDirectory.appendingPathComponent("steady-selftest-\(UUID().uuidString)")
         try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
         return url
@@ -52,7 +57,7 @@ enum SelfTest {
 
     // MARK: Model
 
-    private static func syntheticData() -> (pos: [[Double]], neg: [[Double]]) {
+    static func syntheticData() -> (pos: [[Double]], neg: [[Double]]) {
         var rng = SplitMix64(seed: 1)
         func noise() -> Double { Double.random(in: -1...1, using: &rng) }
         var pos: [[Double]] = [], neg: [[Double]] = []
@@ -224,7 +229,10 @@ enum SelfTest {
         guard let source = syntheticFrame(0, width: 640, height: 480) else { return "could not make a frame" }
         // 12 s of frames at 10 fps, trigger at 10 s, 4 s after.
         var t = 0.0
-        while t < 10 { recorder.append(source, now: t, meta: ClipFrameMeta(activityScore: 1 + t / 10, handNear: t > 8, smileActive: false)); t += 0.1 }
+        while t < 10 {
+            recorder.append(source, now: t, meta: ClipFrameMeta(activityScore: 1 + t / 10, handNear: t > 8, smileActive: false))
+            t += 0.1
+        }
         guard recorder.trigger(.overActive, now: t) else { return "trigger refused" }
         guard !recorder.trigger(.handsAtFace, now: t) else { return "second trigger was accepted while recording" }
         while t < 14.2 { recorder.append(source, now: t, meta: ClipFrameMeta(activityScore: 3, handNear: false, smileActive: false)); t += 0.1 }
@@ -354,150 +362,5 @@ enum SelfTest {
         guard abs(alerts[1] - 32) < 0.15 else { return "second alert at \(alerts[1]), expected after the 30 s cooldown" }
         guard suppressed == 1 else { return "cooldown suppression logged \(suppressed) times" }
         return nil
-    }
-
-    // MARK: Looking away
-
-    private static func faceFrame(yaw: Double, t: Double) -> FrameAnalysis {
-        var a = FrameAnalysis()
-        a.time = t
-        a.facePresent = true
-        a.yaw = yaw
-        a.faceBox = CGRect(x: 0.35, y: 0.35, width: 0.3, height: 0.4)
-        return a
-    }
-
-    private static func lookAwayGrace() -> String? {
-        let d = AttentionDetector()
-        let settings = Settings()
-        var alerts: [Double] = []
-        var t = 0.0
-        while t < 5 { _ = d.update(analysis: faceFrame(yaw: 0, t: t), model: nil, active: true, typing: false, settings: settings, now: t); t += 1.0 / 15 }
-        let turnedAt = t
-        while t < 40 {
-            let out = d.update(analysis: faceFrame(yaw: 0.8, t: t), model: nil, active: true, typing: false, settings: settings, now: t)
-            for e in out.events { if case .alert = e { alerts.append(t - turnedAt) } }
-            t += 1.0 / 15
-        }
-        guard alerts.count == 3 else { return "expected 3 alerts in 35 s, got \(alerts.count)" }
-        // Smoothing takes a few frames, then the 2.5 s grace time.
-        guard alerts[0] > 2.5, alerts[0] < 3.3 else { return String(format: "first alert after %.2f s", alerts[0]) }
-        guard abs(alerts[1] - alerts[0] - 15) < 0.2 else { return "repeat not 15 s later" }
-        guard d.awaySeconds > 30, d.eyesOnSeconds > 4 else { return "away/on-screen seconds not counted" }
-        return nil
-    }
-
-    private static func typingMutes() -> String? {
-        let d = AttentionDetector()
-        var t = 0.0
-        while t < 10 {
-            let out = d.update(analysis: faceFrame(yaw: 0.8, t: t), model: nil, active: true, typing: true, settings: Settings(), now: t)
-            if out.events.contains(where: { if case .alert = $0 { return true } else { return false } }) { return "alerted while typing" }
-            t += 1.0 / 15
-        }
-        return nil
-    }
-
-    private static func missingFace() -> String? {
-        let d = AttentionDetector()
-        var t = 0.0
-        while t < 3 { _ = d.update(analysis: faceFrame(yaw: 0, t: t), model: nil, active: true, typing: false, settings: Settings(), now: t); t += 1.0 / 15 }
-        var alerted = false
-        var lastState = AttentionDetector.State.onScreen
-        while t < 53 {
-            var a = FrameAnalysis(); a.time = t
-            let out = d.update(analysis: a, model: nil, active: true, typing: false, settings: Settings(), now: t)
-            if out.events.contains(where: { if case .alert = $0 { return true } else { return false } }) { alerted = true }
-            lastState = out.state
-            t += 1.0 / 15
-        }
-        guard alerted else { return "no alert when the face disappeared" }
-        guard lastState == .leftDesk else { return "state after 50 s without a face: \(lastState.rawValue)" }
-        return nil
-    }
-
-    private static func handZone() -> String? {
-        let face = CGRect(x: 0.4, y: 0.4, width: 0.2, height: 0.3)
-        let zone = ActivityDetector.handZone(for: face)
-        guard zone.contains(CGPoint(x: 0.5, y: 0.33)) else { return "chin and beard area below the face box not covered" }
-        guard zone.contains(CGPoint(x: 0.38, y: 0.5)) else { return "side of the face not covered" }
-        guard !zone.contains(CGPoint(x: 0.5, y: 0.2)) else { return "zone reaches the chest" }
-        let detector = ActivityDetector()
-        var t = 0.0
-        var alerted = false
-        while t < 4 {
-            var a = FrameAnalysis()
-            a.time = t; a.facePresent = true; a.faceBox = face; a.iod = 40
-            a.hands = [HandPose(chirality: 1, joints: ["indexTip": Joint(name: "indexTip", point: CGPoint(x: 0.5, y: 0.35), confidence: 0.9)])]
-            let out = detector.update(analysis: a, enabled: true, settings: Settings(), now: t)
-            if out.handsEvents.contains(where: { if case .alert = $0 { return true } else { return false } }) { alerted = true }
-            t += 1.0 / 15
-        }
-        return alerted ? nil : "no hands-at-face alert after 4 s"
-    }
-
-    private static func bodyMovement() -> String? {
-        let detector = ActivityDetector()
-        var t = 0.0, frame = 0
-        var calmRatio = 0.0, busyRatio = 0.0
-        while t < 80 {
-            var a = FrameAnalysis(); a.time = t
-            if frame % 3 == 1 {
-                // Calm for 60 s (tiny sway), then swaying a lot.
-                let amp = t < 60 ? 0.002 : 0.05
-                let dx = amp * sin(t * 3)
-                a.body = ["leftShoulder": Joint(name: "leftShoulder", point: CGPoint(x: 0.35 + dx, y: 0.3), confidence: 0.9),
-                          "rightShoulder": Joint(name: "rightShoulder", point: CGPoint(x: 0.65 + dx, y: 0.3), confidence: 0.9),
-                          "neck": Joint(name: "neck", point: CGPoint(x: 0.5 + dx, y: 0.32), confidence: 0.9)]
-            }
-            let out = detector.update(analysis: a, enabled: true, settings: Settings(), now: t)
-            if t > 55 && t < 60 { calmRatio = out.bodyRatio }
-            busyRatio = out.bodyRatio
-            t += 1.0 / 15; frame += 1
-        }
-        guard calmRatio > 0.3, calmRatio < 3 else { return String(format: "calm ratio %.2f", calmRatio) }
-        guard busyRatio > 3 else { return String(format: "busy ratio %.2f", busyRatio) }
-        return nil
-    }
-
-    private static func calmBaseline() -> String? {
-        var b = CalmBaseline(floor: 0.1)
-        var t = 0.0
-        // 60 s calm at 1.0, then 60 s busy at 5.0.
-        while t < 120 { b.add(t < 60 ? 1.0 : 5.0, now: t); t += 1.0 / 15 }
-        guard abs(b.value - 1.0) < 0.05 else { return String(format: "baseline %.2f", b.value) }
-        return nil
-    }
-
-    private static func settingsMerge() -> String? {
-        let stored = Data(#"{"smileThreshold": 0.8, "unknownKey": 5}"#.utf8)
-        let s = Settings.load(from: stored)
-        guard s.smileThreshold == 0.8 else { return "stored value lost" }
-        guard s.gazeGrace == 2.5, s.clipCapMB == 500 else { return "defaults lost" }
-        return nil
-    }
-
-    private static func deleteData() -> String? {
-        let dir = tempDir()
-        defer { try? FileManager.default.removeItem(at: dir) }
-        let (pos, neg) = syntheticData()
-        let models = ModelStore(url: dir.appendingPathComponent("models.json"))
-        models.update { $0.smile = LogisticModel.train(positives: pos, negatives: neg); $0.calmMotion = 1 }
-        let stats = StatsStore(url: dir.appendingPathComponent("stats.json"))
-        stats.update { $0.smileEpisodes = 3 }
-        stats.saveNow()
-        models.deleteAll()
-        stats.deleteAll()
-        guard models.smile == nil, models.file.calmMotion == nil else { return "model still loaded" }
-        guard !FileManager.default.fileExists(atPath: dir.appendingPathComponent("models.json").path) else { return "models.json still on disk" }
-        guard !FileManager.default.fileExists(atPath: dir.appendingPathComponent("stats.json").path) else { return "stats.json still on disk" }
-        guard StatsStore(url: dir.appendingPathComponent("stats.json")).today.smileEpisodes == 0 else { return "stats came back" }
-        return nil
-    }
-
-    private static func haptics() -> String? {
-        let backend = Haptics.shared.backend
-        print("      haptic backend: \(backend.rawValue) \(Haptics.shared.detail)")
-        return backend == .none ? "no backend" : nil
     }
 }

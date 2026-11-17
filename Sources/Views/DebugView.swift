@@ -66,9 +66,8 @@ enum DebugWindow {
 
     static func show() {
         let w = WindowManager.shared.show(id, title: "Steady Debug", size: fullSize, minSize: NSSize(width: 320, height: 400),
-                                          onClose: { DebugWindowState.shared.mini = false }) {
-            DebugView()
-        }
+                                          onClose: { DebugWindowState.shared.mini = false },
+                                          content: { DebugView() })
         // A window closed in mini layout must not reopen at the mini size.
         if !DebugWindowState.shared.mini, w.frame.width < 900 {
             w.setContentSize(fullSize)
@@ -218,7 +217,7 @@ struct DebugView: View {
             }
             GridRow {
                 ReadoutCell(label: "Vision per frame", value: String(format: "%.1f ms", s.visionMs))
-                ReadoutCell(label: "Hand pose", value: "Every \(s.handEvery) frames")
+                ReadoutCell(label: "Quality", value: s.idle ? "Idle, no face in view" : "\(s.quality.title), pose every \(s.handEvery) frames")
             }
             GridRow {
                 ReadoutCell(label: "CPU", value: String(format: "%.1f%%", model.cpu))
@@ -265,6 +264,7 @@ struct DebugView: View {
     }
 
     private var modeText: String {
+        if !app.settings.detects(.smile) { return "Turned off" }
         if ModelStore.shared.smile == nil { return "Needs calibration" }
         if model.snap.paused { return "Paused" }
         return "Only while studying"
@@ -322,7 +322,8 @@ struct DebugView: View {
             }
             .font(.callout)
             if a.warmingUp {
-                Label("Learning your calm level (motion \(a.baselineSeconds.0) s, head \(a.baselineSeconds.1) s of 30). Over-active alerts start after that.", systemImage: "hourglass")
+                Label("Learning your calm level (motion \(a.baselineSeconds.0) s, "
+                    + "head \(a.baselineSeconds.1) s of 30). Over-active alerts start after that.", systemImage: "hourglass")
                     .font(.callout).foregroundStyle(.secondary)
             }
             HStack {

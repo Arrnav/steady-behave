@@ -6,6 +6,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private var statusBar: StatusBarController?
     private var cancellables: Set<AnyCancellable> = []
     private var cleanupTimer: Timer?
+    private var systemObservers: [NSObjectProtocol] = []
     private let app = AppState.shared
     private let engine = Engine.shared
 
@@ -52,6 +53,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     self.updateCamera()
                 }
             }
+            .store(in: &cancellables)
+        app.refreshQuality()
+        app.$settings
+            .map { "\($0.cameraQuality.rawValue) \($0.batterySaverOnBattery)" }
+            .removeDuplicates()
+            .dropFirst()
+            .sink { [weak self] _ in DispatchQueue.main.async { self?.app.refreshQuality() } }
+            .store(in: &cancellables)
+        NotificationCenter.default.publisher(for: .NSProcessInfoPowerStateDidChange)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in self?.app.refreshQuality() }
             .store(in: &cancellables)
         app.$settings
             .map { [$0.quietDuringCalls, $0.autoMode, $0.cameraOffDuringCalls] }
@@ -100,6 +112,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationWillTerminate(_ notification: Notification) {
         FocusContext.shared.endSessionForQuit()
         StatsStore.shared.saveNow()
+        app.saveSettingsNow()
         engine.camera.stop()
     }
 
@@ -119,24 +132,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// Camera off when the screen locks, the display sleeps or the Mac sleeps.
     private func observeSystemState() {
         let distributed = DistributedNotificationCenter.default()
-        distributed.addObserver(forName: NSNotification.Name("com.apple.screenIsLocked"), object: nil, queue: .main) { [weak self] _ in
-            self?.app.screenLocked = true
-        }
-        distributed.addObserver(forName: NSNotification.Name("com.apple.screenIsUnlocked"), object: nil, queue: .main) { [weak self] _ in
-            self?.app.screenLocked = false
-        }
-        let ws = NSWorkspace.shared.notificationCenter
-        ws.addObserver(forName: NSWorkspace.screensDidSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.app.displayAsleep = true
-        }
-        ws.addObserver(forName: NSWorkspace.screensDidWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.app.displayAsleep = false
-        }
-        ws.addObserver(forName: NSWorkspace.willSleepNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.app.systemAsleep = true
-        }
-        ws.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { [weak self] _ in
-            self?.app.systemAsleep = false
+        let workspace = NSWorkspace.shared.notificationCenter
+        let rules: [(NotificationCenter, Notification.Name, (AppState) -> Void)] = [
+            (distributed, Notification.Name("com.apple.screenIsLocked"), { $0.screenLocked = true }),
+            (distributed, Notification.Name("com.apple.screenIsUnlocked"), { $0.screenLocked = false }),
+            (workspace, NSWorkspace.screensDidSleepNotification, { $0.displayAsleep = true }),
+            (workspace, NSWorkspace.screensDidWakeNotification, { $0.displayAsleep = false }),
+            (workspace, NSWorkspace.willSleepNotification, { $0.systemAsleep = true }),
+            (workspace, NSWorkspace.didWakeNotification, { $0.systemAsleep = false })
+        ]
+        systemObservers = rules.map { center, name, apply in
+            center.addObserver(forName: name, object: nil, queue: .main) { [weak self] _ in
+                guard let self else { return }
+                apply(self.app)
+            }
         }
     }
 

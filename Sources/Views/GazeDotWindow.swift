@@ -157,7 +157,8 @@ final class GazeCalibration: ObservableObject {
             return
         }
         guard offScreen.count >= 20 else {
-            setPhase(.retry("Only \(offScreen.count) frames showed your face while you looked away. Turning very far hides the face, which Steady already counts as looking away. Try again and look away a little less far."))
+            setPhase(.retry("Only \(offScreen.count) frames showed your face while you looked away. Turning very far hides the face, "
+                + "which Steady already counts as looking away. Try again and look away a little less far."))
             return
         }
         setPhase(.training)
@@ -284,13 +285,15 @@ struct GazeCalibrationView: View {
     private var message: String {
         switch calibration.phase {
         case .intro:
-            return "First, a dot moves slowly around the screen for 20 seconds. Follow it with your eyes. Then you look away for 15 seconds. Press Space to start or Esc to cancel."
+            return "First, a dot moves slowly around the screen for 20 seconds. Follow it with your eyes. "
+                + "Then you look away for 15 seconds. Press Space to start or Esc to cancel."
         case .getReady:
             return "Look at the dot when it appears."
         case .onScreen:
             return ""
         case .lookAwayIntro:
-            return "Look at the left wall, the right side, the ceiling, your phone in your lap and over the laptop. Move between them. A sound plays when you can look back."
+            return "Look at the left wall, the right side, the ceiling, your phone in your lap and over the laptop. "
+                + "Move between them. A sound plays when you can look back."
         case .offScreen:
             return "Keep moving your gaze between places away from the screen. \(calibration.offCount) frames so far."
         case .training:

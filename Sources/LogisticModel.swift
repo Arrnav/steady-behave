@@ -165,8 +165,9 @@ struct ModelFile: Codable {
     var smileRelaxedMeans: [Double]?
     var gaze: LogisticModel?
     var gazeData = TrainingSet()
-    /// Calm motion energy measured during the relaxed step.
+    /// Calm motion energy measured during the relaxed step, and the camera quality it was measured at.
     var calmMotion: Double?
+    var calmMotionQuality: String?
 }
 
 enum ModelKind: String {

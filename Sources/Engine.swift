@@ -22,6 +22,24 @@ struct EngineSnapshot {
     var handEvery = 3
     var missedActive = false
     var clipFrames = 0
+    var quality = CameraQuality.balanced
+    var idle = false
+}
+
+/// Which detections run on a frame. Decided in one place from settings and the focus context.
+struct DetectionGates: Equatable {
+    var smile = false
+    var lookAway = false
+    var overActive = false
+    var hands = false
+
+    init(settings: Settings, focus: FocusSnapshot) {
+        let live = !focus.paused
+        smile = live && settings.detects(.smile) && (settings.smileMode == .always || focus.gazeActive)
+        lookAway = live && settings.detects(.lookAway) && focus.gazeActive
+        overActive = live && settings.detects(.overActive)
+        hands = live && settings.detects(.handsAtFace)
+    }
 }
 
 struct HistoryPoint: Identifiable {
@@ -82,14 +100,22 @@ final class Engine {
     /// Calibration hooks: called on the main thread with each analysed frame.
     let calibrationSink = Locked<((FrameAnalysis) -> Void)?>(nil)
     let cpuPercent = Locked(0.0)
+    /// Camera quality in use, set by AppState from the setting and the power source.
+    let quality = Locked(CameraQuality.balanced)
 
     private let previewContext = CIContext(options: [.cacheIntermediates: false])
 
     // Camera-queue state.
     private var lastProcessed = -Double.infinity
+    private var nextFrameDue = -Double.infinity
     private var frameIndex = 0
     private var targetFps = 15.0
     private var handEvery = 3
+    /// Caps from automatic performance tuning, on top of the chosen quality.
+    private var fpsCap = 15.0
+    private var poseEveryFloor = 3
+    private var activeQuality: CameraQuality?
+    private var noFaceSince: Double?
     private var fpsCounter: [Double] = []
     private var lastHands: [HandPose] = []
     private var lastHandsTime = -Double.infinity
@@ -108,7 +134,6 @@ final class Engine {
     private var smileStart: Double?
     private var smileFocusedAtStart = false
     private var cpuWindowStart: (wall: Double, cpu: Double)?
-    private var calmMotionLoaded = false
     private var firstFrameTime: Double?
 
     private init() {
@@ -122,21 +147,38 @@ final class Engine {
     // MARK: Frame handling (camera queue)
 
     private func handle(_ buffer: CVPixelBuffer, now: Double) {
-        guard now - lastProcessed >= 0.85 / targetFps else { return }
+        // The camera always delivers 15 fps; take a frame each time the next slot at the target rate is due.
+        guard now >= nextFrameDue - 0.01 else { return }
+        nextFrameDue = max(nextFrameDue + 1 / targetFps, now - 1 / targetFps)
         lastProcessed = now
         frameIndex += 1
 
         let settings = AppState.settingsSnapshot.get()
         let focus = self.focus.get()
         let models = ModelStore.shared.file
-        if !calmMotionLoaded {
-            calmMotionLoaded = true
-            if let calm = models.calmMotion { activity.setCalmMotion(calm) }
+        let quality = self.quality.get()
+        if quality != activeQuality {
+            // Motion between frames depends on the frame rate, so the calm level starts over.
+            activeQuality = quality
+            vision.reset()
+            let calm = models.calmMotionQuality == quality.rawValue ? models.calmMotion : nil
+            activity.resetBaselines(calmMotion: calm)
         }
 
-        let runHands = frameIndex % handEvery == 0
-        let runBody = frameIndex % handEvery == 1
+        // With no face for a while, only look for a face, at a low rate.
+        let idle = (noFaceSince.map { now - $0 > 10 } ?? false) && !focus.calibrating
+        targetFps = idle ? 2 : min(quality.fps, fpsCap)
+        handEvery = max(quality.poseEvery, poseEveryFloor)
+
+        // Hand and body pose only run when a detection (or the debug preview) uses them.
+        let gates = DetectionGates(settings: settings, focus: focus)
+        let preview = previewConsumers.get() > 0
+        let needHands = gates.hands || preview
+        let needBody = (gates.overActive && settings.weightBody > 0) || preview
+        let runHands = !idle && needHands && frameIndex % handEvery == 0
+        let runBody = !idle && needBody && frameIndex % handEvery == 1
         let a = vision.analyze(buffer, time: now, runHands: runHands, runBody: runBody)
+        noFaceSince = a.facePresent ? nil : (noFaceSince ?? now)
         if let h = a.hands { lastHands = h; lastHandsTime = now }
         if let b = a.body { lastBody = b; lastBodyTime = now }
         if now - lastHandsTime > 1 { lastHands = [] }
@@ -152,14 +194,14 @@ final class Engine {
         }
 
         let typing = Self.secondsSinceInput() < settings.typingWindow
-        let smileEnabled = !paused && (settings.smileMode == .always || focus.gazeActive)
-        let s = smile.update(features: a.smileFeatures, model: models.smile, enabled: smileEnabled, settings: settings, now: now)
-        let g = attention.update(analysis: a, model: models.gaze, active: !paused && focus.gazeActive,
+        let s = smile.update(features: a.smileFeatures, model: models.smile, enabled: gates.smile, settings: settings, now: now)
+        let g = attention.update(analysis: a, model: models.gaze, active: gates.lookAway,
                                  typing: typing, settings: settings, now: now)
-        let act = activity.update(analysis: a, enabled: !paused, settings: settings, now: now)
+        let act = activity.update(analysis: a, overActiveEnabled: gates.overActive, handsEnabled: gates.hands,
+                                  settings: settings, now: now)
 
         handleSmile(s.events, value: s.smoothed, focus: focus, settings: settings, now: now)
-        handleGaze(g, focus: focus, settings: settings, now: now)
+        handleGaze(g, gazeOn: gates.lookAway, focus: focus, settings: settings, now: now)
         handleActivity(act, focus: focus, settings: settings, now: now)
 
         // Feedback windows.
@@ -220,6 +262,8 @@ final class Engine {
         snap.targetFps = targetFps
         snap.handEvery = handEvery
         snap.missedActive = missedUntil != nil
+        snap.quality = quality
+        snap.idle = idle
         snap.clipFrames = clips.bufferedFrames
         snapshot.set(snap)
 
@@ -254,8 +298,8 @@ final class Engine {
         }
     }
 
-    private func handleGaze(_ g: AttentionDetector.Output, focus: FocusSnapshot, settings: Settings, now: Double) {
-        if g.typing, focus.gazeActive, let raw = g.raw, raw > settings.gazeThreshold {
+    private func handleGaze(_ g: AttentionDetector.Output, gazeOn: Bool, focus: FocusSnapshot, settings: Settings, now: Double) {
+        if g.typing, gazeOn, let raw = g.raw, raw > settings.gazeThreshold {
             if !typingLogged {
                 typingLogged = true
                 EventLog.shared.add(.suppressed, .lookAway, "Typing or using the mouse")
@@ -365,12 +409,12 @@ final class Engine {
         cpuPercent.set(percent)
         cpuWindowStart = (now, cpu)
         guard settings.adaptivePerformance, previewConsumers.get() == 0 else { return }
-        if percent > 15, targetFps > 10 {
-            targetFps = 10; handEvery = 4
+        if percent > 15, fpsCap > 10 {
+            fpsCap = 10; poseEveryFloor = 4
             EventLog.shared.add(.info, nil, String(format: "CPU at %.0f%%, lowering to 10 fps", percent))
-        } else if percent < 8, targetFps < 15 {
-            targetFps = 15; handEvery = 3
-            EventLog.shared.add(.info, nil, String(format: "CPU at %.0f%%, back to 15 fps", percent))
+        } else if percent < 8, fpsCap < 15 {
+            fpsCap = 15; poseEveryFloor = 3
+            EventLog.shared.add(.info, nil, String(format: "CPU at %.0f%%, back to the full frame rate", percent))
         }
     }
 

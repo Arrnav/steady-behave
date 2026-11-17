@@ -19,7 +19,6 @@ struct DebugOverlay {
         .nose: Color(red: 0.85, green: 0.65, blue: 1.0),
         .noseCrest: Color(red: 0.75, green: 0.55, blue: 0.95),
         .medianLine: Color(white: 0.85),
-        .outerLips: AlertKind.smile.color,
         .innerLips: Color(red: 1.0, green: 0.75, blue: 0.55)
     ]
 
@@ -50,20 +49,8 @@ struct DebugOverlay {
 
         guard let a = snap.analysis else { return }
 
-        // Image pixel coordinates (origin bottom-left) to view coordinates.
-        func px(_ p: CGPoint) -> CGPoint {
-            let x = p.x / imageSize.width
-            let y = p.y / imageSize.height
-            return CGPoint(x: rect.minX + (mirrored ? 1 - x : x) * rect.width, y: rect.minY + (1 - y) * rect.height)
-        }
-        // Normalized coordinates (0...1, origin bottom-left) to view coordinates.
-        func nm(_ p: CGPoint) -> CGPoint {
-            CGPoint(x: rect.minX + (mirrored ? 1 - p.x : p.x) * rect.width, y: rect.minY + (1 - p.y) * rect.height)
-        }
-        func nmRect(_ r: CGRect) -> CGRect {
-            let a = nm(CGPoint(x: r.minX, y: r.minY)), b = nm(CGPoint(x: r.maxX, y: r.maxY))
-            return CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
-        }
+        let map = Mapper(imageSize: imageSize, rect: rect, mirrored: mirrored)
+        let px = map.px, nm = map.nm, nmRect = map.nmRect
 
         if layers.contains(.motion), !a.motionMap.isEmpty, let heat = Self.heatmap(a.motionMap) {
             var layer = ctx
@@ -97,45 +84,7 @@ struct DebugOverlay {
         guard a.facePresent else { return }
 
         if layers.contains(.face) {
-            let box = nmRect(a.faceBox)
-            ctx.stroke(Path(roundedRect: box, cornerRadius: 4), with: .color(.white.opacity(0.55)), lineWidth: 1)
-            for region in LandmarkRegion.allCases {
-                guard let points = a.landmarks[region], !points.isEmpty else { continue }
-                let color = (Self.regionColors[region] ?? .white).opacity(0.85)
-                if region == .leftPupil || region == .rightPupil {
-                    for p in points {
-                        let v = px(p)
-                        ctx.fill(Path(ellipseIn: CGRect(x: v.x - 2.5, y: v.y - 2.5, width: 5, height: 5)), with: .color(color))
-                    }
-                    continue
-                }
-                var path = Path()
-                path.addLines(points.map(px))
-                if region.isClosed { path.closeSubpath() }
-                ctx.stroke(path, with: .color(color), lineWidth: 1.2)
-            }
-            // Mouth corners and the measured width.
-            if let outer = a.landmarks[.outerLips], let left = outer.min(by: { $0.x < $1.x }), let right = outer.max(by: { $0.x < $1.x }) {
-                let l = px(left), r = px(right)
-                var line = Path()
-                line.move(to: l); line.addLine(to: r)
-                ctx.stroke(line, with: .color(AlertKind.smile.color.opacity(0.9)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
-                for p in [l, r] {
-                    ctx.fill(Path(ellipseIn: CGRect(x: p.x - 3, y: p.y - 3, width: 6, height: 6)), with: .color(AlertKind.smile.color))
-                }
-                // Labels only when the preview is big enough to read them.
-                if rect.width >= 560, let width = a.smileFeatures?.first {
-                    let mid = CGPoint(x: (l.x + r.x) / 2, y: max(l.y, r.y) + 14)
-                    ctx.draw(Text(String(format: "width %.2f", width)).font(.system(size: 10, weight: .medium).monospacedDigit())
-                                .foregroundStyle(AlertKind.smile.color), at: mid)
-                }
-                if rect.width >= 560 {
-                    ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
-                             at: CGPoint(x: l.x - 14, y: l.y - 10))
-                    ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
-                             at: CGPoint(x: r.x + 14, y: r.y - 10))
-                }
-            }
+            drawFace(&ctx, a, map: map)
         }
 
         let eyeMid: CGPoint? = {
@@ -174,6 +123,51 @@ struct DebugOverlay {
                 arrow.addLine(to: CGPoint(x: to.x - 9 * cos(angle + side), y: to.y - 9 * sin(angle + side)))
             }
             ctx.stroke(arrow, with: .color(color.opacity(0.9)), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+        }
+    }
+
+    /// Face box, every landmark region, mouth corners and the measured mouth width.
+    private func drawFace(_ ctx: inout GraphicsContext, _ a: FrameAnalysis, map: Mapper) {
+        let px = map.px, nmRect = map.nmRect
+        let box = nmRect(a.faceBox)
+        ctx.stroke(Path(roundedRect: box, cornerRadius: 4), with: .color(.white.opacity(0.55)), lineWidth: 1)
+        for region in LandmarkRegion.allCases {
+            guard let points = a.landmarks[region], !points.isEmpty else { continue }
+            let base = region == .outerLips ? AlertKind.smile.color : (Self.regionColors[region] ?? .white)
+            let color = base.opacity(0.85)
+            if region == .leftPupil || region == .rightPupil {
+                for p in points {
+                    let v = px(p)
+                    ctx.fill(Path(ellipseIn: CGRect(x: v.x - 2.5, y: v.y - 2.5, width: 5, height: 5)), with: .color(color))
+                }
+                continue
+            }
+            var path = Path()
+            path.addLines(points.map(px))
+            if region.isClosed { path.closeSubpath() }
+            ctx.stroke(path, with: .color(color), lineWidth: 1.2)
+        }
+        // Mouth corners and the measured width.
+        if let outer = a.landmarks[.outerLips], let left = outer.min(by: { $0.x < $1.x }), let right = outer.max(by: { $0.x < $1.x }) {
+            let l = px(left), r = px(right)
+            var line = Path()
+            line.move(to: l); line.addLine(to: r)
+            ctx.stroke(line, with: .color(AlertKind.smile.color.opacity(0.9)), style: StrokeStyle(lineWidth: 1, dash: [3, 3]))
+            for p in [l, r] {
+                ctx.fill(Path(ellipseIn: CGRect(x: p.x - 3, y: p.y - 3, width: 6, height: 6)), with: .color(AlertKind.smile.color))
+            }
+            // Labels only when the preview is big enough to read them.
+            if map.rect.width >= 560, let width = a.smileFeatures?.first {
+                let mid = CGPoint(x: (l.x + r.x) / 2, y: max(l.y, r.y) + 14)
+                ctx.draw(Text(String(format: "width %.2f", width)).font(.system(size: 10, weight: .medium).monospacedDigit())
+                            .foregroundStyle(AlertKind.smile.color), at: mid)
+            }
+            if map.rect.width >= 560 {
+                ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
+                         at: CGPoint(x: l.x - 14, y: l.y - 10))
+                ctx.draw(Text("corner").font(.system(size: 9)).foregroundStyle(.white.opacity(0.8)),
+                         at: CGPoint(x: r.x + 14, y: r.y - 10))
+            }
         }
     }
 
@@ -278,6 +272,28 @@ struct DebugOverlay {
         if snap.analysis?.facePresent == false { return ("No face in view", .secondary) }
         if snap.gaze.typing && snap.gazeReason != .inactive { return ("Typing: alerts muted", .secondary) }
         return ("Watching", .green)
+    }
+}
+
+/// Converts Vision coordinates (origin bottom-left) into view coordinates for the drawn image.
+struct Mapper {
+    let imageSize: CGSize
+    let rect: CGRect
+    let mirrored: Bool
+
+    /// From image pixel coordinates.
+    func px(_ p: CGPoint) -> CGPoint {
+        nm(CGPoint(x: p.x / imageSize.width, y: p.y / imageSize.height))
+    }
+
+    /// From normalized coordinates (0...1).
+    func nm(_ p: CGPoint) -> CGPoint {
+        CGPoint(x: rect.minX + (mirrored ? 1 - p.x : p.x) * rect.width, y: rect.minY + (1 - p.y) * rect.height)
+    }
+
+    func nmRect(_ r: CGRect) -> CGRect {
+        let a = nm(CGPoint(x: r.minX, y: r.minY)), b = nm(CGPoint(x: r.maxX, y: r.maxY))
+        return CGRect(x: min(a.x, b.x), y: min(a.y, b.y), width: abs(a.x - b.x), height: abs(a.y - b.y))
     }
 }
 

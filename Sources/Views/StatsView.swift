@@ -3,6 +3,14 @@ import SwiftUI
 
 struct StatsView: View {
     @ObservedObject private var stats = StatsStore.shared
+    /// Observed so alert colors update when they change in Settings.
+    @ObservedObject private var app = AppState.shared
+
+    private static let dayLabel: DateFormatter = {
+        let f = DateFormatter()
+        f.setLocalizedDateFormatFromTemplate("EEE d")
+        return f
+    }()
 
     private struct DayPoint: Identifiable {
         var id: String { key }
@@ -13,11 +21,9 @@ struct StatsView: View {
 
     private var lastSevenDays: [DayPoint] {
         let cal = Calendar.current
-        let labelFormatter = DateFormatter()
-        labelFormatter.dateFormat = "EEE d"
         return (0..<7).reversed().compactMap { offset in
             guard let date = cal.date(byAdding: .day, value: -offset, to: Date()) else { return nil }
-            return DayPoint(key: StatsStore.key(for: date), label: labelFormatter.string(from: date), stats: stats.day(date))
+            return DayPoint(key: StatsStore.key(for: date), label: Self.dayLabel.string(from: date), stats: stats.day(date))
         }
     }
 
@@ -85,14 +91,16 @@ struct StatsView: View {
         let eyesPercent = eyesTotal > 0 ? "\(Int((100 * t.eyesOnSeconds / eyesTotal).rounded()))%" : "–"
         let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
         return LazyVGrid(columns: columns, spacing: 12) {
-            StatTile(title: "Smile episodes", value: "\(t.smileEpisodes)", detail: "\(Format.duration(t.smileSeconds)) in total", color: AlertKind.smile.color)
+            StatTile(title: "Smile episodes", value: "\(t.smileEpisodes)",
+                     detail: "\(Format.duration(t.smileSeconds)) in total", color: AlertKind.smile.color)
             StatTile(title: "Look-aways", value: "\(t.lookAways)", detail: "Eyes on screen \(eyesPercent)", color: AlertKind.lookAway.color)
             StatTile(title: "Focused", value: Format.duration(t.focusedSeconds),
-                     detail: t.sessions == 1 ? "1 session, \(Int(t.sessionMinutes.rounded())) min" : "\(t.sessions) sessions, \(Int(t.sessionMinutes.rounded())) min",
+                     detail: "\(t.sessions == 1 ? "1 session" : "\(t.sessions) sessions"), \(Int(t.sessionMinutes.rounded())) min",
                      color: .accentColor)
             StatTile(title: "Over-active", value: "\(t.overActive)", detail: "Moving a lot for 3 s or more", color: AlertKind.overActive.color)
             StatTile(title: "Hands at face", value: "\(t.handsAtFace)", detail: "2 s or more", color: AlertKind.handsAtFace.color)
-            StatTile(title: "Feedback", value: "\(t.falseAlarms + t.missed)", detail: "\(t.falseAlarms) false alarms, \(t.missed) missed", color: .secondary)
+            StatTile(title: "Feedback", value: "\(t.falseAlarms + t.missed)",
+                     detail: "\(t.falseAlarms) false alarms, \(t.missed) missed", color: .secondary)
         }
     }
 

@@ -156,7 +156,8 @@ final class SmileCalibrationController: ObservableObject {
         keptPositives = positives.count
         guard positives.count >= 15 else {
             retryStep3 = true
-            phase = .retry("Only \(positives.count) frames looked wider than your relaxed mouth. Try step 3 again and pull the corners a little wider.")
+            phase = .retry("Only \(positives.count) frames looked wider than your relaxed mouth. "
+                + "Try step 3 again and pull the corners a little wider.")
             return
         }
         phase = .training
@@ -166,6 +167,7 @@ final class SmileCalibrationController: ObservableObject {
         ModelStore.shared.update { file in
             file.smileRelaxedMeans = relaxedMeans
             file.calmMotion = calm
+            file.calmMotionQuality = Engine.shared.quality.get().rawValue
         }
         Engine.shared.setCalmMotion(calm)
         ModelStore.shared.calibrate(.smile, positives: positives, negatives: negatives) { [weak self] model in
@@ -248,7 +250,8 @@ struct SmileCalibrationView: View {
     private var subtitle: String {
         switch controller.phase {
         case .intro:
-            return "Three short steps of 15 seconds each, about a minute in total. Steady learns how your face looks when relaxed, during normal expressions, and during the stretched smile."
+            return "Three short steps of 15 seconds each, about a minute in total. "
+                + "Steady learns how your face looks when relaxed, during normal expressions, and during the stretched smile."
         case .getReady: return "Get ready. Recording starts in a moment."
         case .capture(let s): return SmileCalibrationController.steps[s - 1].instruction
         case .training: return "Learning from your frames. This takes a few seconds."

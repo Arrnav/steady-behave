@@ -66,6 +66,7 @@ final class ClipPlayer: ObservableObject {
 
 struct ClipsView: View {
     @StateObject private var player = ClipPlayer()
+    @ObservedObject private var app = AppState.shared
     @State private var clips: [ClipStorage.Entry] = []
     @State private var selectedDay: String?
     @State private var selectedClip: ClipStorage.Entry?
@@ -194,8 +195,11 @@ struct ClipsView: View {
                 Button("Delete Clip", role: .destructive) { deleteSelected() }
                     .disabled(selectedClip == nil)
                 Button("Reveal in Finder") {
-                    if let url = selectedClip?.url { NSWorkspace.shared.activateFileViewerSelecting([url]) }
-                    else { NSWorkspace.shared.open(Paths.clips) }
+                    if let url = selectedClip?.url {
+                        NSWorkspace.shared.activateFileViewerSelecting([url])
+                    } else {
+                        NSWorkspace.shared.open(Paths.clips)
+                    }
                 }
                 Spacer()
                 Button("Delete All from This Day", role: .destructive) { confirmDeleteDay = true }
@@ -259,6 +263,7 @@ struct ClipsView: View {
 
 struct ClipRow: View {
     let entry: ClipStorage.Entry
+    @ObservedObject private var app = AppState.shared
     @State private var thumbnail: CGImage?
 
     var body: some View {
@@ -268,7 +273,7 @@ struct ClipRow: View {
                 if let thumbnail {
                     Image(decorative: thumbnail, scale: 1)
                         .resizable()
-                        .aspectRatio(contentMode: .fill)
+                        .scaledToFill()
                 }
             }
             .frame(width: 80, height: 60)

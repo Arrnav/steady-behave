@@ -19,8 +19,8 @@ enum AlertKind: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    /// Soft, slightly desaturated colours that read well in light and dark mode.
-    var nsColor: NSColor {
+    /// Soft, slightly desaturated defaults that read well in light and dark mode.
+    var defaultColor: NSColor {
         switch self {
         case .smile: return NSColor(srgbRed: 0.93, green: 0.60, blue: 0.36, alpha: 1)
         case .lookAway: return NSColor(srgbRed: 0.38, green: 0.58, blue: 0.90, alpha: 1)
@@ -29,7 +29,31 @@ enum AlertKind: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    /// Resolved colors, updated whenever settings change.
+    private static let resolvedColors = Locked<[AlertKind: NSColor]>([:])
+
+    static func refreshColors(from settings: Settings) {
+        var colors: [AlertKind: NSColor] = [:]
+        for kind in allCases {
+            colors[kind] = settings.alertColors[kind.rawValue].flatMap(NSColor.init(hex:)) ?? kind.defaultColor
+        }
+        resolvedColors.set(colors)
+    }
+
+    /// The color used everywhere for this kind: the user's choice, or the default.
+    var nsColor: NSColor { Self.resolvedColors.get()[self] ?? defaultColor }
+
     var color: Color { Color(nsColor: nsColor) }
+
+    /// Name of the detection itself, used for on/off switches.
+    var detectionTitle: String {
+        switch self {
+        case .smile: return "Stretched Smile"
+        case .lookAway: return "Looking Away"
+        case .overActive: return "Moving a Lot"
+        case .handsAtFace: return "Hands at Face"
+        }
+    }
 
     var symbol: String {
         switch self {
@@ -111,9 +135,29 @@ enum Format {
         return String(format: "%d:%02d", s / 60, s % 60)
     }
 
-    static func time(_ date: Date) -> String {
+    private static let timeFormatter: DateFormatter = {
         let f = DateFormatter()
         f.dateFormat = "HH:mm:ss"
-        return f.string(from: date)
+        return f
+    }()
+
+    static func time(_ date: Date) -> String { timeFormatter.string(from: date) }
+}
+
+extension NSColor {
+    /// Parses "#RRGGBB" (sRGB).
+    convenience init?(hex: String) {
+        let digits = hex.trimmingCharacters(in: CharacterSet(charactersIn: "#"))
+        guard digits.count == 6, let value = UInt32(digits, radix: 16) else { return nil }
+        self.init(srgbRed: CGFloat((value >> 16) & 0xFF) / 255,
+                  green: CGFloat((value >> 8) & 0xFF) / 255,
+                  blue: CGFloat(value & 0xFF) / 255, alpha: 1)
+    }
+
+    /// "#RRGGBB" in sRGB, or nil for colors that have no RGB value (patterns, for example).
+    var hexString: String? {
+        guard let c = usingColorSpace(.sRGB) else { return nil }
+        func byte(_ v: CGFloat) -> Int { Int((max(0, min(1, v)) * 255).rounded()) }
+        return String(format: "#%02X%02X%02X", byte(c.redComponent), byte(c.greenComponent), byte(c.blueComponent))
     }
 }

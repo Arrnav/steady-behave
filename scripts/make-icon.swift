@@ -5,10 +5,17 @@ import AppKit
 let output = CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : "AppIcon.iconset"
 try? FileManager.default.createDirectory(atPath: output, withIntermediateDirectories: true)
 
+func fail(_ message: String) -> Never {
+    FileHandle.standardError.write(Data("make-icon: \(message)\n".utf8))
+    exit(1)
+}
+
 func drawIcon(pixels: Int) -> Data {
-    let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
-                               bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
-                               colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0)!
+    guard let rep = NSBitmapImageRep(bitmapDataPlanes: nil, pixelsWide: pixels, pixelsHigh: pixels,
+                                     bitsPerSample: 8, samplesPerPixel: 4, hasAlpha: true, isPlanar: false,
+                                     colorSpaceName: .deviceRGB, bytesPerRow: 0, bitsPerPixel: 0) else {
+        fail("could not create a \(pixels) px bitmap")
+    }
     rep.size = NSSize(width: pixels, height: pixels)
     NSGraphicsContext.saveGraphicsState()
     NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
@@ -32,18 +39,19 @@ func drawIcon(pixels: Int) -> Data {
     NSGraphicsContext.restoreGraphicsState()
 
     // Calm teal-to-indigo gradient.
-    let gradient = NSGradient(colors: [
+    guard let gradient = NSGradient(colors: [
         NSColor(calibratedRed: 0.36, green: 0.72, blue: 0.74, alpha: 1),
         NSColor(calibratedRed: 0.33, green: 0.47, blue: 0.80, alpha: 1),
         NSColor(calibratedRed: 0.40, green: 0.35, blue: 0.72, alpha: 1)
-    ])!
+    ]) else { fail("could not create the background gradient") }
     gradient.draw(in: shape, angle: -60)
 
     // Subtle top highlight.
     NSGraphicsContext.saveGraphicsState()
     shape.addClip()
-    let highlight = NSGradient(colors: [NSColor.white.withAlphaComponent(0.18), NSColor.white.withAlphaComponent(0)])!
-    highlight.draw(in: NSRect(x: rect.minX, y: rect.midY, width: rect.width, height: rect.height / 2), angle: -90)
+    if let highlight = NSGradient(colors: [NSColor.white.withAlphaComponent(0.18), NSColor.white.withAlphaComponent(0)]) {
+        highlight.draw(in: NSRect(x: rect.minX, y: rect.midY, width: rect.width, height: rect.height / 2), angle: -90)
+    }
     NSGraphicsContext.restoreGraphicsState()
 
     // Eye mark: an almond outline with a solid iris, centred on the tile.
@@ -78,7 +86,8 @@ func drawIcon(pixels: Int) -> Data {
     line.stroke()
 
     NSGraphicsContext.restoreGraphicsState()
-    return rep.representation(using: .png, properties: [:])!
+    guard let png = rep.representation(using: .png, properties: [:]) else { fail("could not encode PNG") }
+    return png
 }
 
 let sizes: [(String, Int)] = [
@@ -90,5 +99,9 @@ let sizes: [(String, Int)] = [
 ]
 for (name, px) in sizes {
     let url = URL(fileURLWithPath: output).appendingPathComponent("\(name).png")
-    try! drawIcon(pixels: px).write(to: url)
+    do {
+        try drawIcon(pixels: px).write(to: url)
+    } catch {
+        fail("could not write \(url.path): \(error.localizedDescription)")
+    }
 }

@@ -30,6 +30,17 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
             ?? all.first(where: { $0.deviceType != .continuityCamera })
     }
 
+    /// 640x480 YUV, the camera's smallest native mode. The size is set explicitly because on recent
+    /// macOS a VGA preset alone can still deliver 1080p frames. Smaller sizes would need scaling,
+    /// which costs more than it saves; lower quality settings process fewer frames instead.
+    private func videoSettings() -> [String: Any] {
+        [
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
+            kCVPixelBufferWidthKey as String: 640,
+            kCVPixelBufferHeightKey as String: 480
+        ]
+    }
+
     func requestAccess(completion: @escaping (AVAuthorizationStatus) -> Void) {
         let status = AVCaptureDevice.authorizationStatus(for: .video)
         if status == .notDetermined {
@@ -92,13 +103,7 @@ final class CameraService: NSObject, AVCaptureVideoDataOutputSampleBufferDelegat
         if !configured {
             // The camera's native YUV format: Vision reads it directly and motion uses the luma plane,
             // which costs much less CPU than converting every frame to BGRA.
-            // Ask for 640x480 explicitly: on recent macOS the capture pipeline can deliver 1080p frames
-            // even with a VGA preset, which costs much more CPU and memory.
-            output.videoSettings = [
-                kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarFullRange,
-                kCVPixelBufferWidthKey as String: 640,
-                kCVPixelBufferHeightKey as String: 480
-            ]
+            output.videoSettings = videoSettings()
             output.alwaysDiscardsLateVideoFrames = true
             output.setSampleBufferDelegate(self, queue: frameQueue)
             if session.canAddOutput(output) { session.addOutput(output) }

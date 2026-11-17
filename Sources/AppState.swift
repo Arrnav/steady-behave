@@ -14,10 +14,14 @@ final class Locked<T> {
 }
 
 enum Paths {
+    /// The data folder holds camera clips, so only the owner can read it.
     static var support: URL {
-        let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        let fm = FileManager.default
+        let base = fm.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+            ?? fm.homeDirectoryForCurrentUser.appendingPathComponent("Library/Application Support")
         let url = base.appendingPathComponent("Steady", isDirectory: true)
-        try? FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+        try? fm.createDirectory(at: url, withIntermediateDirectories: true, attributes: [.posixPermissions: 0o700])
+        try? fm.setAttributes([.posixPermissions: 0o700], ofItemAtPath: url.path)
         return url
     }
     static var models: URL { support.appendingPathComponent("models.json") }
@@ -29,6 +33,33 @@ enum Paths {
     }
 }
 
+/// How many camera frames are analysed. Lower settings use less battery and react a little slower.
+enum CameraQuality: String, Codable, CaseIterable, Identifiable {
+    case high, balanced, batterySaver
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .high: return "High"
+        case .balanced: return "Balanced"
+        case .batterySaver: return "Battery Saver"
+        }
+    }
+
+    var fps: Double {
+        switch self {
+        case .high: return 15
+        case .balanced: return 10
+        case .batterySaver: return 5
+        }
+    }
+
+    /// Hand and body pose run on every nth frame.
+    var poseEvery: Int { self == .batterySaver ? 4 : 3 }
+
+    var detail: String { "\(Int(fps)) frames per second" }
+}
+
 enum SmileMode: String, Codable, CaseIterable, Identifiable {
     case always, studyOnly
     var id: String { rawValue }
@@ -38,6 +69,8 @@ enum SmileMode: String, Codable, CaseIterable, Identifiable {
 /// Every user setting. Stored as JSON in UserDefaults. New fields fall back to their defaults.
 struct Settings: Codable, Equatable {
     var cameraID: String?
+    var cameraQuality = CameraQuality.balanced
+    var batterySaverOnBattery = true
 
     // Smile
     var smileThreshold = 0.75
@@ -69,7 +102,12 @@ struct Settings: Codable, Equatable {
     var handsCooldown = 30.0
     var handsClipAfter = 5.0
 
+    /// Each detection can be switched off on its own. Missing keys mean on.
+    var detectionEnabled: [String: Bool] = [:]
+
     // Alerts
+    /// Alert colours as "#RRGGBB", keyed by alert kind. Missing keys use the default palette.
+    var alertColors: [String: String] = [:]
     var volume = 0.6
     var soundEnabled: [String: Bool] = [:]
     var soundNames: [String: String] = [:]
@@ -110,6 +148,7 @@ struct Settings: Codable, Equatable {
         "Cisco-Systems.Spark": "Webex"
     ]
 
+    func detects(_ kind: AlertKind) -> Bool { detectionEnabled[kind.rawValue] ?? true }
     func sound(for kind: AlertKind) -> Bool { soundEnabled[kind.rawValue] ?? true }
     func soundName(for kind: AlertKind) -> String { soundNames[kind.rawValue] ?? kind.defaultSound }
     func haptic(for kind: AlertKind) -> Bool {
@@ -194,7 +233,8 @@ final class AppState: ObservableObject {
         didSet {
             guard settings != oldValue else { return }
             AppState.settingsSnapshot.set(settings)
-            saveSettings()
+            AlertKind.refreshColors(from: settings)
+            scheduleSave()
         }
     }
 
@@ -215,6 +255,40 @@ final class AppState: ObservableObject {
     /// Bumped whenever a model is trained, so views refresh.
     @Published var modelVersion = 0
 
+    private var qualityApplied = false
+
+    /// The camera quality in use right now, after battery rules.
+    @Published var effectiveQuality = CameraQuality.balanced
+    @Published var qualityReason = ""
+    /// `--quality <name>` at launch overrides the setting without saving it.
+    let qualityOverride: CameraQuality? = {
+        let args = CommandLine.arguments
+        guard let i = args.firstIndex(of: "--quality"), i + 1 < args.count else { return nil }
+        return CameraQuality(rawValue: args[i + 1])
+    }()
+
+    /// Picks the camera quality from the setting, the power source and Low Power Mode.
+    func refreshQuality() {
+        var quality = settings.cameraQuality
+        var reason = "Chosen in Settings"
+        if let override = qualityOverride {
+            quality = override
+            reason = "Set at launch"
+        } else if ProcessInfo.processInfo.isLowPowerModeEnabled {
+            quality = .batterySaver
+            reason = "Low Power Mode is on"
+        } else if settings.batterySaverOnBattery, PowerSource.onBattery {
+            quality = .batterySaver
+            reason = "Running on battery"
+        }
+        if qualityReason != reason { qualityReason = reason }
+        guard quality != effectiveQuality || !qualityApplied else { return }
+        qualityApplied = true
+        effectiveQuality = quality
+        Engine.shared.quality.set(quality)
+        EventLog.shared.add(.info, nil, "Camera quality: \(quality.title) (\(quality.detail)), \(reason.lowercased())")
+    }
+
     /// Calibration windows need the camera even while monitoring is paused.
     @Published var calibrationActive = false { didSet { onCameraConditionsChanged?() } }
 
@@ -224,13 +298,32 @@ final class AppState: ObservableObject {
         let loaded = Settings.load(from: UserDefaults.standard.data(forKey: "settings"))
         settings = loaded
         AppState.settingsSnapshot.set(loaded)
+        AlertKind.refreshColors(from: loaded)
         monitoringEnabled = UserDefaults.standard.object(forKey: "monitoringEnabled") as? Bool ?? true
     }
 
-    private func saveSettings() {
+    private var saveWork: DispatchWorkItem?
+
+    /// Sliders and the color picker change settings many times a second, so saving waits for a pause.
+    private func scheduleSave() {
+        saveWork?.cancel()
+        let work = DispatchWorkItem { [weak self] in self?.saveSettingsNow() }
+        saveWork = work
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5, execute: work)
+    }
+
+    func saveSettingsNow() {
+        saveWork?.cancel()
+        saveWork = nil
         if let data = try? JSONEncoder().encode(settings) {
             UserDefaults.standard.set(data, forKey: "settings")
         }
+    }
+
+    func setDetection(_ kind: AlertKind, enabled: Bool) {
+        guard settings.detects(kind) != enabled else { return }
+        settings.detectionEnabled[kind.rawValue] = enabled
+        EventLog.shared.add(.info, kind, enabled ? "Detection on" : "Detection off")
     }
 
     var isPaused: Bool {

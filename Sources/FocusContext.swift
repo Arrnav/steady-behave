@@ -124,7 +124,13 @@ final class FocusContext: ObservableObject {
         return "\(minutes)m"
     }
 
+    private var ticks = 0
+
     private func tick() {
+        ticks += 1
+        // Plugging in or unplugging the charger changes the camera quality within 10 seconds.
+        if ticks % 10 == 0 { app.refreshQuality() }
+
         // Expire timed pause and quiet mode.
         if let until = app.pausedUntil, until != .distantFuture, until <= Date() {
             app.pausedUntil = nil

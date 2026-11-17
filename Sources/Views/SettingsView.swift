@@ -69,6 +69,21 @@ struct SettingsView: View {
     }
 }
 
+extension AppState {
+    func detectionBinding(_ kind: AlertKind) -> Binding<Bool> {
+        Binding(get: { self.settings.detects(kind) },
+                set: { self.setDetection(kind, enabled: $0) })
+    }
+
+    func colorBinding(_ kind: AlertKind) -> Binding<Color> {
+        Binding(get: { kind.color },
+                set: { color in
+                    guard let hex = NSColor(color).hexString, hex != self.settings.alertColors[kind.rawValue] else { return }
+                    self.settings.alertColors[kind.rawValue] = hex
+                })
+    }
+}
+
 /// A slider row with its value shown on the right.
 struct SliderRow: View {
     let title: String
@@ -113,12 +128,33 @@ private struct GeneralPane: View {
                     loginOn = LoginItem.isEnabled
                 }))
             }
-            Section("Camera") {
+            Section {
+                ForEach(AlertKind.allCases) { kind in
+                    Toggle(isOn: app.detectionBinding(kind)) {
+                        Label(kind.detectionTitle, systemImage: kind.symbol)
+                    }
+                }
+            } header: {
+                Text("Detections")
+            } footer: {
+                Text("A detection that is off gives no alerts, adds nothing to stats and saves no clips. Also in the menu bar, under Detections.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+            Section {
                 Picker("Camera", selection: $app.settings.cameraID) {
                     Text("Built-in camera").tag(String?.none)
                     ForEach(devices, id: \.uniqueID) { d in
                         Text(d.localizedName).tag(Optional(d.uniqueID))
                     }
+                }
+                Picker("Quality", selection: $app.settings.cameraQuality) {
+                    ForEach(CameraQuality.allCases) { q in
+                        Text("\(q.title) (\(q.detail))").tag(q)
+                    }
+                }
+                Toggle("Use Battery Saver on battery power", isOn: $app.settings.batterySaverOnBattery)
+                LabeledContent("In use") {
+                    Text("\(app.effectiveQuality.title), \(app.qualityReason.lowercased())").foregroundStyle(.secondary)
                 }
                 LabeledContent("Status") {
                     Text(cameraStatus).foregroundStyle(.secondary)
@@ -126,6 +162,12 @@ private struct GeneralPane: View {
                 if app.cameraAuthorization != .authorized {
                     Button("Open Camera Settings") { Actions.openCameraSettings() }
                 }
+            } header: {
+                Text("Camera")
+            } footer: {
+                Text("Lower quality analyses fewer frames, which uses less battery and reacts a little slower. "
+                    + "With nobody in view for 10 seconds, Steady checks only twice a second.")
+                    .font(.caption).foregroundStyle(.secondary)
             }
             Section {
                 Picker("Session length", selection: $app.settings.sessionMinutes) {
@@ -178,6 +220,9 @@ private struct SmilePane: View {
     var body: some View {
         let model = ModelStore.shared.smile
         Form {
+            Section {
+                Toggle("Detect the stretched smile", isOn: app.detectionBinding(.smile))
+            }
             Section("Model") {
                 ModelStatusRow(model: model, emptyText: "Not calibrated. Smile alerts start after calibration.")
                 Button(model == nil ? "Calibrate Smile…" : "Calibrate Again…") { Actions.showSmileCalibration() }
@@ -195,7 +240,8 @@ private struct SmilePane: View {
             } header: {
                 Text("Detection")
             } footer: {
-                Text("An alert fires when the smile score stays above the threshold for the hold time. While the smile continues, it repeats after each cooldown.")
+                Text("An alert fires when the smile score stays above the threshold for the hold time. "
+                    + "While the smile continues, it repeats after each cooldown.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Feedback") {
@@ -240,6 +286,9 @@ private struct GazePane: View {
     var body: some View {
         let model = ModelStore.shared.gaze
         Form {
+            Section {
+                Toggle("Detect looking away", isOn: app.detectionBinding(.lookAway))
+            }
             Section("Model") {
                 ModelStatusRow(model: model, emptyText: "Not calibrated. Until then, Steady uses head angle only.")
                 Button(model == nil ? "Calibrate Gaze…" : "Calibrate Again…") { Actions.showGazeCalibration() }
@@ -278,8 +327,8 @@ private struct GazePane: View {
                         Toggle(isOn: Binding(
                             get: { app.settings.studyApps.contains(item.bundleID) },
                             set: { on in
-                                if on { if !app.settings.studyApps.contains(item.bundleID) { app.settings.studyApps.append(item.bundleID) } }
-                                else { app.settings.studyApps.removeAll { $0 == item.bundleID } }
+                                app.settings.studyApps.removeAll { $0 == item.bundleID }
+                                if on { app.settings.studyApps.append(item.bundleID) }
                                 FocusContext.shared.refresh()
                             })) {
                             HStack(spacing: 8) {
@@ -358,6 +407,10 @@ private struct ActivityPane: View {
     var body: some View {
         Form {
             Section {
+                Toggle("Detect moving a lot", isOn: app.detectionBinding(.overActive))
+                Toggle("Detect hands at face", isOn: app.detectionBinding(.handsAtFace))
+            }
+            Section {
                 SliderRow(title: "Threshold", value: $app.settings.activityThreshold, range: 1.2...6, format: "%.1fx")
                 SliderRow(title: "Hold time", value: $app.settings.activityHold, range: 1...10, format: "%.1f s")
                 SliderRow(title: "Cooldown", value: $app.settings.activityCooldown, range: 10...300, step: 5, format: "%.0f s")
@@ -415,7 +468,11 @@ private struct AlertsPane: View {
                     .disabled(!app.settings.sound(for: kind))
                     Toggle("Trackpad haptic", isOn: Binding(get: { app.settings.haptic(for: kind) },
                                                             set: { app.settings.hapticEnabled[kind.rawValue] = $0 }))
+                    ColorPicker("Glow color", selection: app.colorBinding(kind), supportsOpacity: false)
                     HStack {
+                        if app.settings.alertColors[kind.rawValue] != nil {
+                            Button("Reset Color") { app.settings.alertColors[kind.rawValue] = nil }
+                        }
                         Spacer()
                         Button("Show Test Alert") { AlertCenter.shared.simulate(kind) }
                     }
@@ -441,7 +498,8 @@ private struct AlertsPane: View {
             } header: {
                 Text("Calls")
             } footer: {
-                Text("While Zoom, Microsoft Teams, FaceTime or Webex is in front, alerts have no sound or haptic and a smaller, fainter glow. macOS lets several apps use the camera at once, so Steady can keep watching during a call.")
+                Text("While Zoom, Microsoft Teams, FaceTime or Webex is in front, alerts have no sound or haptic and a smaller, "
+                    + "fainter glow. macOS lets several apps use the camera at once, so Steady can keep watching during a call.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -564,6 +622,8 @@ private struct PrivacyPane: View {
                 Label("Steady has no network code and makes no internet connections.", systemImage: "wifi.slash")
                 Label("Face and hand detection use Apple's Vision framework on this Mac.", systemImage: "cpu")
                 Label("The camera turns off when monitoring is paused, the screen is locked or the Mac sleeps.", systemImage: "video.slash")
+                Label("Clips are ordinary video files that other apps running as you can read. Turn clips off in Clips if you prefer.",
+                      systemImage: "film")
             } header: {
                 Text("On this Mac only")
             }

@@ -22,7 +22,6 @@ final class AttentionDetector {
         var events: [EpisodeTracker.Event] = []
     }
 
-    private let alpha = 0.3
     private var smoothed = 0.0
     private var tracker = EpisodeTracker(hold: 2.5, cooldown: 15, maxAlerts: 3, release: 0.6)
     private var lastFaceTime: Double?
@@ -81,6 +80,7 @@ final class AttentionDetector {
             out.typing = true
         }
 
+        let alpha = Smoothing.alpha(dt: dt > 0 ? dt : 1.0 / 15)
         smoothed = alpha * p + (1 - alpha) * smoothed
         out.smoothed = smoothed
         let away = smoothed > settings.gazeThreshold

@@ -165,7 +165,7 @@ final class VisionPipeline {
                     a.iod = FaceFeatures.distance(FaceFeatures.centroid(le), FaceFeatures.centroid(re))
                 }
                 // Smile features get unreliable when the head turns or the face is tiny.
-                if abs(a.yaw) <= 0.35, a.iod >= 22 {
+                if abs(a.yaw) <= 0.35, a.iod >= 22 * Double(w) / 640 {
                     a.smileFeatures = FaceFeatures.smile(a.landmarks)
                 }
                 a.gazeFeatures = FaceFeatures.gaze(a.landmarks, yaw: a.yaw, pitch: a.pitch, roll: a.roll, faceBox: a.faceBox)
@@ -272,7 +272,8 @@ final class VisionPipeline {
             .transformed(by: CGAffineTransform(scaleX: CGFloat(mw) / CGFloat(w), y: CGFloat(mh) / CGFloat(h)))
             .applyingFilter("CIColorControls", parameters: [kCIInputSaturationKey: 0])
         small.withUnsafeMutableBytes { ptr in
-            context.render(image, toBitmap: ptr.baseAddress!, rowBytes: mw,
+            guard let base = ptr.baseAddress else { return }
+            context.render(image, toBitmap: base, rowBytes: mw,
                            bounds: CGRect(x: 0, y: 0, width: mw, height: mh), format: .L8, colorSpace: nil)
         }
         return small

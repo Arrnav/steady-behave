@@ -1,5 +1,14 @@
 import Foundation
 
+/// Exponential smoothing tuned as alpha 0.3 per frame at 15 fps, scaled for the actual time step,
+/// so alerts react at the same speed at any frame rate.
+enum Smoothing {
+    static func alpha(dt: Double) -> Double {
+        let steps = max(0, min(2, dt)) * 15
+        return 1 - pow(0.7, steps)
+    }
+}
+
 /// Turns a stream of "is the habit happening" values into episodes and alerts.
 ///
 /// - The condition must hold for `hold` seconds before an episode starts.

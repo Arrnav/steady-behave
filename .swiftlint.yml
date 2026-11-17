@@ -1,0 +1,42 @@
+included:
+  - Sources
+  - scripts
+
+opt_in_rules:
+  - empty_count
+  - first_where
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - redundant_nil_coalescing
+  - sorted_first_last
+
+
+line_length:
+  warning: 150
+  error: 200
+  ignores_comments: true
+
+identifier_name:
+  min_length: 1
+  max_length: 50
+
+type_name:
+  min_length: 2
+
+file_length:
+  warning: 700
+
+type_body_length:
+  warning: 450
+
+function_body_length:
+  warning: 120
+
+cyclomatic_complexity:
+  warning: 25
+
+large_tuple:
+  warning: 4
+
+function_parameter_count:
+  warning: 7

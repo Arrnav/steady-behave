@@ -3,6 +3,7 @@ import SwiftUI
 /// Shown when a study session ends.
 struct SessionSummaryView: View {
     let summary: FocusContext.SessionSummary
+    @ObservedObject private var app = AppState.shared
 
     var body: some View {
         VStack(alignment: .leading, spacing: Metrics.spacing) {

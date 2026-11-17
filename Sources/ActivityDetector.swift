@@ -85,7 +85,14 @@ final class ActivityDetector {
     private var bodyWindow: [(Double, Double)] = []
     private var handWindow: [(Double, Bool)] = []
 
-    private var lastFace: (time: Double, center: CGPoint, yaw: Double, iod: Double, box: CGRect)?
+    private struct FaceSample {
+        let time: Double
+        let center: CGPoint
+        let yaw: Double
+        let box: CGRect
+    }
+
+    private var lastFace: FaceSample?
     private var lastBody: (time: Double, joints: [String: Joint])?
     private var handNear = false
     private var handsClipSent = false
@@ -98,8 +105,18 @@ final class ActivityDetector {
         motion.setInitial(value)
     }
 
+    /// Starts the calm levels over, for example after the camera quality changes.
+    func resetBaselines(calmMotion: Double?) {
+        motion = CalmBaseline(floor: 0.6, initial: calmMotion)
+        head = CalmBaseline(floor: 0.08)
+        body = CalmBaseline(floor: 0.03)
+        motionWindow.removeAll(); headWindow.removeAll(); bodyWindow.removeAll(); handWindow.removeAll()
+        lastFace = nil
+        lastBody = nil
+    }
+
     static func handZone(for face: CGRect) -> CGRect {
-        // Wider by 15% on each side and 35% further down, to cover the beard below the face box.
+        // 15% wider on each side and 35% taller downwards, to cover the chin area below the face box.
         CGRect(x: face.minX - face.width * 0.15, y: face.minY - face.height * 0.35,
                width: face.width * 1.3, height: face.height * 1.35)
     }
@@ -113,7 +130,7 @@ final class ActivityDetector {
         return window.reduce(0) { $0 + $1.1 } / Double(window.count)
     }
 
-    func update(analysis a: FrameAnalysis, enabled: Bool, settings: Settings, now: Double) -> Output {
+    func update(analysis a: FrameAnalysis, overActiveEnabled: Bool, handsEnabled: Bool, settings: Settings, now: Double) -> Output {
         overActive.hold = settings.activityHold
         overActive.cooldown = settings.activityCooldown
         hands.hold = settings.handsHold
@@ -135,7 +152,7 @@ final class ActivityDetector {
                 headWindow.append((now, speed))
                 head.add(speed, now: now)
             }
-            lastFace = (now, center, a.yaw, a.iod, a.faceBox)
+            lastFace = FaceSample(time: now, center: center, yaw: a.yaw, box: a.faceBox)
         }
 
         // Upper-body movement: mean joint displacement, in shoulder widths per second.
@@ -191,7 +208,8 @@ final class ActivityDetector {
         out.handNear = handNear
 
         // Weighted average of the parts, so a calm moment scores about 1.
-        let handPart = 1 + 4 * out.handFraction
+        // With hands-at-face switched off, hands near the face don't raise the score either.
+        let handPart = handsEnabled ? 1 + 4 * out.handFraction : 1
         let wSum = settings.weightMotion + settings.weightHead + settings.weightBody + settings.weightHands
         if wSum > 0 {
             out.score = (settings.weightMotion * out.motionRatio + settings.weightHead * out.headRatio
@@ -200,17 +218,15 @@ final class ActivityDetector {
 
         out.warmingUp = !(motion.isWarm && head.isWarm)
         out.baselineSeconds = (motion.secondsOfData, head.secondsOfData, body.secondsOfData)
-        if enabled {
-            out.overActiveEvents = overActive.update(active: out.score > settings.activityThreshold && !out.warmingUp,
-                                                     value: out.score, now: now)
-            out.handsEvents = hands.update(active: handNear, value: out.handFraction, now: now)
-        } else {
-            out.overActiveEvents = overActive.reset(now: now)
-            out.handsEvents = hands.reset(now: now)
-        }
+        out.overActiveEvents = overActiveEnabled
+            ? overActive.update(active: out.score > settings.activityThreshold && !out.warmingUp, value: out.score, now: now)
+            : overActive.reset(now: now)
+        out.handsEvents = handsEnabled
+            ? hands.update(active: handNear, value: out.handFraction, now: now)
+            : hands.reset(now: now)
         out.handHeld = hands.heldFor(now: now)
         if !hands.inEpisode { handsClipSent = false }
-        if enabled, hands.inEpisode, !handsClipSent, out.handHeld >= settings.handsClipAfter {
+        if handsEnabled, hands.inEpisode, !handsClipSent, out.handHeld >= settings.handsClipAfter {
             handsClipSent = true
             out.handsClipDue = true
         }

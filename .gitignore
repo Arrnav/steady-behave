@@ -73,10 +73,7 @@ build/
 .vscode/
 .claude/settings.local.json
 
-# This build prompt has personal notes and stays out of the public repo
-steady-claude-code-prompt.md
-
-# Never commit camera data, even by accident
+# Never commit camera data or personal models, even by accident
 *.mp4
 *.mov
 models.json

@@ -12,8 +12,8 @@ final class SmileDetector {
         var events: [EpisodeTracker.Event] = []
     }
 
-    private let alpha = 0.3
     private(set) var smoothed = 0.0
+    private var lastTime: Double?
     private var tracker = EpisodeTracker(hold: 0.6, cooldown: 8, maxAlerts: 3)
     private(set) var output = Output()
 
@@ -24,6 +24,8 @@ final class SmileDetector {
 
         var out = Output()
         out.enabled = enabled && model != nil
+        let alpha = Smoothing.alpha(dt: now - (lastTime ?? now - 1.0 / 15))
+        lastTime = now
 
         if let model, let features {
             let p = model.probability(features)

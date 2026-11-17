@@ -33,23 +33,23 @@ SOURCES=$(find Sources -name '*.swift' | sort)
 swiftc -O -swift-version 5 -target arm64-apple-macos14.0 \
     -framework AppKit -framework SwiftUI -framework AVFoundation -framework AVKit \
     -framework Vision -framework CoreImage -framework CoreMedia -framework CoreVideo \
-    -framework Carbon -framework ServiceManagement -framework Charts \
+    -framework Carbon -framework ServiceManagement -framework Charts -framework IOKit \
     -o "$BIN" $SOURCES
 
 cp Info.plist "$APP/Contents/Info.plist"
 
-# Signing. Camera permission (TCC) is tied to the code signature, so a stable
-# "Apple Development" identity keeps the permission across rebuilds.
+# Signing with the hardened runtime. Camera permission (TCC) is tied to the code signature,
+# so a stable "Apple Development" identity keeps the permission across rebuilds.
 IDENTITY_HASH=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | awk '{print $2}' || true)
 IDENTITY_NAME=$(security find-identity -v -p codesigning 2>/dev/null | grep "Apple Development" | head -1 | sed -E 's/.*"(.*)".*/\1/' || true)
 
 if [ -n "$IDENTITY_HASH" ]; then
     /usr/libexec/PlistBuddy -c "Add :SteadySigningIdentity string $IDENTITY_NAME" "$APP/Contents/Info.plist" >/dev/null
-    codesign --force --sign "$IDENTITY_HASH" "$APP" >/dev/null 2>&1
+    codesign --force --options runtime --entitlements Steady.entitlements --sign "$IDENTITY_HASH" "$APP" >/dev/null 2>&1
     echo "Signed with $IDENTITY_NAME"
 else
     /usr/libexec/PlistBuddy -c "Add :SteadySigningIdentity string ad-hoc" "$APP/Contents/Info.plist" >/dev/null
-    codesign --force --sign - "$APP" >/dev/null 2>&1
+    codesign --force --options runtime --entitlements Steady.entitlements --sign - "$APP" >/dev/null 2>&1
     echo "WARNING: no Apple Development certificate found. Signed ad-hoc."
     echo "         macOS will ask for camera permission again after every rebuild."
 fi

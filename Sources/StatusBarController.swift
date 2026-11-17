@@ -83,13 +83,12 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(NSMenuItem.sectionHeader(title: "Steady"))
 
         if app.cameraAuthorization == .denied || app.cameraAuthorization == .restricted {
-            menu.addItem(item("Allow Camera Access…", symbol: "video.slash", action: #selector(openCameraSettings)))
+            menu.addItem(item("Allow Camera Access", symbol: "video.slash", action: #selector(openCameraSettings)))
         }
 
         let paused = app.isPaused
         let monitoring = item(paused ? "Monitoring: Paused" : "Monitoring: On",
                               symbol: paused ? "eye.slash" : "eye", action: #selector(toggleMonitoring))
-        monitoring.state = paused ? .off : .on
         menu.addItem(monitoring)
 
         if let session = focus.session {
@@ -105,7 +104,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             start.keyEquivalentModifierMask = [.control, .option]
             menu.addItem(start)
             let lengths = NSMenuItem(title: "Session Length", action: nil, keyEquivalent: "")
-            lengths.image = symbol("timer")
+            setIcon(lengths, "timer")
             let sub = NSMenu()
             for (title, minutes) in [("25 Minutes", 25), ("50 Minutes", 50), ("90 Minutes", 90), ("Open-Ended", 0)] {
                 let m = item("Start \(title)", symbol: nil, action: #selector(startSession(_:)))
@@ -124,7 +123,8 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             .font: NSFont.menuFont(ofSize: 0)
         ])
         menu.addItem(summary)
-        if ModelStore.shared.smile == nil {
+        let smileOn = app.settings.detects(.smile)
+        if smileOn, ModelStore.shared.smile == nil {
             menu.addItem(disabled("Smile alerts start after calibration"))
         }
         if app.cameraRunning == false, !paused, app.cameraAuthorization == .authorized {
@@ -142,7 +142,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         let missed = item("Missed One (I'm Doing It Now)", symbol: "plus.circle", action: #selector(missedOne))
         missed.keyEquivalent = "m"
         missed.keyEquivalentModifierMask = [.control, .option]
-        missed.isEnabled = ModelStore.shared.smile != nil
+        missed.isEnabled = smileOn && ModelStore.shared.smile != nil
         menu.addItem(missed)
 
         menu.addItem(.separator())
@@ -155,7 +155,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             menu.addItem(item(resumeTitle(), symbol: "play.circle", action: #selector(resume)))
         } else {
             let pause = NSMenuItem(title: "Pause", action: nil, keyEquivalent: "")
-            pause.image = symbol("pause.circle")
+            setIcon(pause, "pause.circle")
             let sub = NSMenu()
             for (title, seconds) in [("15 Minutes", 900), ("1 Hour", 3600), ("Until Resumed", 0)] {
                 let m = item(title, symbol: nil, action: #selector(pause(_:)))
@@ -166,16 +166,30 @@ final class StatusBarController: NSObject, NSMenuDelegate {
             menu.addItem(pause)
         }
 
+        let detections = NSMenuItem(title: "Detections", action: nil, keyEquivalent: "")
+        setIcon(detections, "checklist")
+        let detectionMenu = NSMenu()
+        for kind in AlertKind.allCases {
+            let m = NSMenuItem(title: kind.detectionTitle, action: #selector(toggleDetection(_:)), keyEquivalent: "")
+            m.target = self
+            m.representedObject = kind.rawValue
+            m.state = app.settings.detects(kind) ? .on : .off
+            detectionMenu.addItem(m)
+        }
+        detections.submenu = detectionMenu
+        menu.addItem(detections)
+
         menu.addItem(.separator())
-        menu.addItem(item("Clips…", symbol: "film", action: #selector(openClips)))
-        menu.addItem(item("Stats…", symbol: "chart.bar", action: #selector(openStats)))
-        menu.addItem(item("Calibrate Smile…", symbol: "mouth", action: #selector(calibrateSmile)))
-        menu.addItem(item("Calibrate Gaze…", symbol: "scope", action: #selector(calibrateGaze)))
-        let debug = item("Debug Mode…", symbol: "waveform.path.ecg", action: #selector(openDebug))
+        menu.addItem(item("Clips", symbol: "film", action: #selector(openClips)))
+        menu.addItem(item("Stats", symbol: "chart.bar", action: #selector(openStats)))
+        menu.addItem(item("Calibrate Smile", symbol: "mouth", action: #selector(calibrateSmile)))
+        menu.addItem(item("Calibrate Gaze", symbol: "scope", action: #selector(calibrateGaze)))
+        let debug = item("Debug Mode", symbol: "waveform.path.ecg", action: #selector(openDebug))
         debug.keyEquivalent = "d"
         debug.keyEquivalentModifierMask = [.control, .option]
         menu.addItem(debug)
-        let settings = item("Settings…", symbol: "gearshape", action: #selector(openSettings))
+        // macOS adds its own gear icon to a "Settings" item with Command-comma.
+        let settings = item("Settings", symbol: nil, action: #selector(openSettings))
         settings.keyEquivalent = ","
         menu.addItem(settings)
 
@@ -203,8 +217,17 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     private func item(_ title: String, symbol name: String?, action: Selector) -> NSMenuItem {
         let m = NSMenuItem(title: title, action: action, keyEquivalent: "")
         m.target = self
-        if let name { m.image = symbol(name) }
+        if let name { setIcon(m, name) }
         return m
+    }
+
+    /// Recent macOS versions don't draw `NSMenuItem.image` in status menus, but they do draw
+    /// state images, in the same column native menus use for icons.
+    private func setIcon(_ m: NSMenuItem, _ name: String) {
+        let image = symbol(name)
+        m.onStateImage = image
+        m.offStateImage = image
+        m.state = .off
     }
 
     private func disabled(_ title: String) -> NSMenuItem {
@@ -218,6 +241,11 @@ final class StatusBarController: NSObject, NSMenuDelegate {
     @objc private func toggleMonitoring() {
         if app.isPaused { app.resume() } else { app.monitoringEnabled = false }
         FocusContext.shared.refresh()
+    }
+
+    @objc private func toggleDetection(_ sender: NSMenuItem) {
+        guard let raw = sender.representedObject as? String, let kind = AlertKind(rawValue: raw) else { return }
+        app.setDetection(kind, enabled: !app.settings.detects(kind))
     }
 
     @objc private func startDefaultSession() { focus.toggleSession() }
