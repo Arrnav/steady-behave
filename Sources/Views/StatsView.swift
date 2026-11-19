@@ -45,12 +45,12 @@ struct StatsView: View {
             return "Study for at least 30 minutes this week to see your rates per hour."
         }
         guard let lastWeek = rate(daysAgo: 7...13, { $0.smileEpisodesFocused }) else {
-            return String(format: "%.1f smile episodes per study hour this week. Next week shows the change.", thisWeek)
+            return String(format: "%.1f expression episodes per study hour this week. Next week shows the change.", thisWeek)
         }
         let diff = thisWeek - lastWeek
-        if abs(diff) < 0.5 { return String(format: "About the same as last week: %.1f smile episodes per study hour.", thisWeek) }
+        if abs(diff) < 0.5 { return String(format: "About the same as last week: %.1f expression episodes per study hour.", thisWeek) }
         let n = Int(abs(diff).rounded())
-        let unit = n == 1 ? "smile episode" : "smile episodes"
+        let unit = n == 1 ? "expression episode" : "expression episodes"
         return "\(n) \(diff < 0 ? "fewer" : "more") \(unit) per hour than last week."
     }
 
@@ -63,9 +63,9 @@ struct StatsView: View {
                 }
                 todayGrid
                 GroupBox {
-                    rateChart(title: "Smiles per study hour", color: AlertKind.smile.color) { $0.smilesPerHour }
+                    rateChart(title: "Expressions per study hour", color: AlertKind.smile.color) { $0.smilesPerHour }
                 } label: {
-                    Label("Smiles per study hour", systemImage: AlertKind.smile.symbol)
+                    Label("Expressions per study hour", systemImage: AlertKind.smile.symbol)
                 }
                 GroupBox {
                     rateChart(title: "Look-aways per study hour", color: AlertKind.lookAway.color) { $0.lookAwaysPerHour }
@@ -91,7 +91,7 @@ struct StatsView: View {
         let eyesPercent = eyesTotal > 0 ? "\(Int((100 * t.eyesOnSeconds / eyesTotal).rounded()))%" : "–"
         let columns = [GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12), GridItem(.flexible(), spacing: 12)]
         return LazyVGrid(columns: columns, spacing: 12) {
-            StatTile(title: "Smile episodes", value: "\(t.smileEpisodes)",
+            StatTile(title: "Expression episodes", value: "\(t.smileEpisodes)",
                      detail: "\(Format.duration(t.smileSeconds)) in total", color: AlertKind.smile.color)
             StatTile(title: "Look-aways", value: "\(t.lookAways)", detail: "Eyes on screen \(eyesPercent)", color: AlertKind.lookAway.color)
             StatTile(title: "Focused", value: Format.duration(t.focusedSeconds),

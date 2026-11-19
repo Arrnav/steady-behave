@@ -144,7 +144,7 @@ struct ClipsView: View {
                 .symbolRenderingMode(.hierarchical)
                 .foregroundStyle(.secondary)
             Text("No clips yet").font(.title3.weight(.semibold))
-            Text("Clips are saved when you move a lot, keep a hand at your face, or do the stretched smile. They stay on this Mac.")
+            Text("Clips are saved when you move a lot, keep a hand at your face, or do the stretched expression. They stay on this Mac.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
                 .multilineTextAlignment(.center)

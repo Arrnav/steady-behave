@@ -12,7 +12,7 @@ enum AlertKind: String, Codable, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .smile: return "Smile"
+        case .smile: return "Expression"
         case .lookAway: return "Look-away"
         case .overActive: return "Over-active"
         case .handsAtFace: return "Hands at face"
@@ -48,7 +48,7 @@ enum AlertKind: String, Codable, CaseIterable, Identifiable {
     /// Name of the detection itself, used for on/off switches.
     var detectionTitle: String {
         switch self {
-        case .smile: return "Stretched Smile"
+        case .smile: return "Stretched Expression"
         case .lookAway: return "Looking Away"
         case .overActive: return "Moving a Lot"
         case .handsAtFace: return "Hands at Face"

@@ -55,9 +55,53 @@ enum CameraQuality: String, Codable, CaseIterable, Identifiable {
     }
 
     /// Hand and body pose run on every nth frame.
-    var poseEvery: Int { self == .batterySaver ? 4 : 3 }
+    var poseEvery: Int { self == .batterySaver ? 5 : 3 }
 
     var detail: String { "\(Int(fps)) frames per second" }
+}
+
+/// Reasons the camera is switched off to save battery while monitoring stays on.
+enum CameraHold: Equatable {
+    case away
+    case notStudying(onBattery: Bool)
+
+    /// Whether the "stepped away" hold should be on next, given what was seen and the last input.
+    static func nextAway(held: Bool, cameraRunning: Bool, noFaceSeconds: Double, idleInputSeconds: Double,
+                         awaySeconds: Double) -> Bool {
+        if held { return idleInputSeconds >= 2 }
+        return cameraRunning && noFaceSeconds >= awaySeconds && idleInputSeconds >= awaySeconds
+    }
+
+    /// The hold to apply, from the watch schedule and the away state.
+    static func decide(schedule: WatchSchedule, studying: Bool, onBattery: Bool, away: Bool) -> CameraHold? {
+        switch schedule {
+        case .studyOnly where !studying: return .notStudying(onBattery: false)
+        case .studyOnlyOnBattery where !studying && onBattery: return .notStudying(onBattery: true)
+        default: return away ? .away : nil
+        }
+    }
+
+    var menuText: String {
+        switch self {
+        case .away: return "Camera off while you're away. Press any key to resume"
+        case .notStudying(let battery):
+            return battery ? "Camera off on battery until you study" : "Camera off until you study"
+        }
+    }
+}
+
+/// When the camera is allowed to run at all.
+enum WatchSchedule: String, Codable, CaseIterable, Identifiable {
+    case always, studyOnly, studyOnlyOnBattery
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .always: return "Always while monitoring"
+        case .studyOnly: return "Only while studying"
+        case .studyOnlyOnBattery: return "Only while studying on battery"
+        }
+    }
 }
 
 enum SmileMode: String, Codable, CaseIterable, Identifiable {
@@ -71,6 +115,10 @@ struct Settings: Codable, Equatable {
     var cameraID: String?
     var cameraQuality = CameraQuality.balanced
     var batterySaverOnBattery = true
+    var watchSchedule = WatchSchedule.always
+    /// Turn the camera off when there is no face and no keyboard or trackpad use for `awayMinutes`.
+    var cameraOffWhenAway = true
+    var awayMinutes = 1.0
 
     // Smile
     var smileThreshold = 0.75
@@ -295,6 +343,9 @@ final class AppState: ObservableObject {
 
     /// The camera quality in use right now, after battery rules.
     @Published var effectiveQuality = CameraQuality.balanced
+    @Published private(set) var onBattery = false
+    /// Why the camera is off even though monitoring is on, or nil. Set by FocusContext.
+    @Published var cameraHold: CameraHold? { didSet { if cameraHold != oldValue { onCameraConditionsChanged?() } } }
     @Published var qualityReason = ""
     /// `--quality <name>` at launch overrides the setting without saving it.
     let qualityOverride: CameraQuality? = {
@@ -305,6 +356,8 @@ final class AppState: ObservableObject {
 
     /// Picks the camera quality from the setting, the power source and Low Power Mode.
     func refreshQuality() {
+        let battery = PowerSource.onBattery
+        if onBattery != battery { onBattery = battery }
         var quality = settings.cameraQuality
         var reason = "Chosen in Settings"
         if let override = qualityOverride {
@@ -313,7 +366,7 @@ final class AppState: ObservableObject {
         } else if ProcessInfo.processInfo.isLowPowerModeEnabled {
             quality = .batterySaver
             reason = "Low Power Mode is on"
-        } else if settings.batterySaverOnBattery, PowerSource.onBattery {
+        } else if settings.batterySaverOnBattery, battery {
             quality = .batterySaver
             reason = "Running on battery"
         }
@@ -379,6 +432,7 @@ final class AppState: ObservableObject {
         if screenLocked || displayAsleep || systemAsleep { return false }
         if calibrationActive { return true }
         if isPaused { return false }
+        if cameraHold != nil { return false }
         if settings.cameraOffDuringCalls && callAppFrontmost != nil { return false }
         return true
     }

@@ -56,7 +56,7 @@ struct EscalationTracker {
         let n = d.sameCount
         switch kind {
         case .smile:
-            return "\(n) stretched smiles in \(span). \(competingResponse)"
+            return "\(n) stretched expressions in \(span). \(competingResponse)"
         case .lookAway:
             return "\(n) look-aways in \(span). Back to the screen."
         case .overActive:

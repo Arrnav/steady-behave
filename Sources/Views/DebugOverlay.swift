@@ -256,12 +256,15 @@ struct DebugOverlay {
 
     /// The state in words, for the banner over the video.
     static func banner(_ snap: EngineSnapshot, settings: Settings, cameraRunning: Bool) -> (String, Color) {
-        if !cameraRunning { return ("Camera off", .secondary) }
+        if !cameraRunning {
+            if let hold = AppState.shared.cameraHold { return (hold.menuText, .secondary) }
+            return ("Camera off", .secondary)
+        }
         if snap.calibrating { return ("Calibrating: alerts off", .secondary) }
         if snap.paused { return ("Paused", .secondary) }
         if let quiet = snap.quietReason { return ("Quiet mode (\(quiet))", .secondary) }
-        if snap.missedActive { return ("Recording a missed smile", AlertKind.smile.color) }
-        if snap.smile.held > 0 { return (String(format: "Smile detected %.1f s", snap.smile.held), AlertKind.smile.color) }
+        if snap.missedActive { return ("Recording a missed expression", AlertKind.smile.color) }
+        if snap.smile.held > 0 { return (String(format: "Expression detected %.1f s", snap.smile.held), AlertKind.smile.color) }
         if !snap.inputPaused.isEmpty {
             return ("Keyboard or mouse in use: " + snap.inputPaused.map(\.title).joined(separator: ", ") + " paused", .secondary)
         }

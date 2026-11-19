@@ -96,7 +96,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 case "settings": Actions.showSettings()
                 case "clips": Actions.showClips()
                 case "stats": Actions.showStats()
-                case "smile": Actions.showSmileCalibration()
+                case "expression": Actions.showSmileCalibration()
                 case "gaze": Actions.showGazeCalibration()
                 case "session": FocusContext.shared.startSession(minutes: 25)
                 case "alert": AlertCenter.shared.simulate(.smile)

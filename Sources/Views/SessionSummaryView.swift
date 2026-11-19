@@ -22,7 +22,7 @@ struct SessionSummaryView: View {
             Grid(alignment: .leading, horizontalSpacing: 24, verticalSpacing: 10) {
                 row("Focus time", Format.duration(summary.focusSeconds), color: .accentColor)
                 row("Look-aways", "\(summary.lookAways)", color: AlertKind.lookAway.color)
-                row("Smiles", "\(summary.smiles)", color: AlertKind.smile.color)
+                row("Expressions", "\(summary.smiles)", color: AlertKind.smile.color)
                 row("Over-active", "\(summary.overActive)", color: AlertKind.overActive.color)
                 row("Hands at face", "\(summary.handsAtFace)", color: AlertKind.handsAtFace.color)
             }

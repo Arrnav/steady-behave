@@ -140,9 +140,11 @@ final class FocusContext: ObservableObject {
             app.quietUntil = nil
         }
 
+        updateCameraHold()
+
         if var s = session {
             let state = Engine.shared.snapshot.get().gaze.state
-            s.awayFromDesk = state == .leftDesk && app.cameraRunning
+            s.awayFromDesk = (state == .leftDesk && app.cameraRunning) || app.cameraHold == .away
             // The timer pauses while away from the desk or while monitoring is paused.
             if !s.awayFromDesk && !app.isPaused {
                 s.activeSeconds += 1
@@ -154,6 +156,29 @@ final class FocusContext: ObservableObject {
         }
         refresh()
     }
+
+    /// Switches the camera off when it isn't needed: outside study time (if the schedule says so),
+    /// or after a minute with no face and no keyboard or trackpad use. Input turns it back on.
+    private func updateCameraHold() {
+        let s = app.settings
+        let studying = gazeReason != .inactive
+        let idleInput = InputActivity.secondsSince(InputActivity.keyboardEvents + InputActivity.mouseEvents)
+        let away = s.awayMinutes * 60
+
+        let next = s.cameraOffWhenAway && !app.calibrationActive && !app.isPaused
+            && CameraHold.nextAway(held: awayHold, cameraRunning: app.cameraRunning,
+                                   noFaceSeconds: Engine.shared.snapshot.get().noFaceSeconds,
+                                   idleInputSeconds: idleInput, awaySeconds: away)
+        if next != awayHold {
+            EventLog.shared.add(.info, nil, next ? "No one in view and no input for \(Int(s.awayMinutes)) min, camera off"
+                                                 : "Back at the Mac, camera on")
+            awayHold = next
+        }
+        let hold = CameraHold.decide(schedule: s.watchSchedule, studying: studying, onBattery: app.onBattery, away: awayHold)
+        if app.cameraHold != hold { app.cameraHold = hold }
+    }
+
+    private var awayHold = false
 
     /// Recomputes the context and hands a copy to the camera queue.
     func refresh() {

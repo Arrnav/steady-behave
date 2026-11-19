@@ -25,6 +25,8 @@ struct EngineSnapshot {
     var quality = CameraQuality.balanced
     var idle = false
     var inputPaused: [AlertKind] = []
+    /// Seconds since a face was last seen while the camera was running.
+    var noFaceSeconds = 0.0
 }
 
 /// Which detections run on a frame. Decided in one place from settings and the focus context.
@@ -285,6 +287,7 @@ final class Engine {
         snap.missedActive = missedUntil != nil
         snap.quality = quality
         snap.inputPaused = gates.inputPaused
+        snap.noFaceSeconds = noFaceSince.map { now - $0 } ?? 0
         snap.idle = idle
         snap.clipFrames = clips.bufferedFrames
         snapshot.set(snap)
@@ -300,7 +303,7 @@ final class Engine {
             case .started:
                 smileStart = now
                 smileFocusedAtStart = focus.gazeActive
-                EventLog.shared.add(.detected, .smile, "Stretched smile", peak: value)
+                EventLog.shared.add(.detected, .smile, "Stretched expression", peak: value)
                 let focused = focus.gazeActive
                 DispatchQueue.main.async {
                     StatsStore.shared.update { d in
@@ -314,7 +317,7 @@ final class Engine {
             case .suppressedCooldown:
                 EventLog.shared.add(.suppressed, .smile, "Cooldown")
             case .ended(let duration, _, let peak):
-                EventLog.shared.add(.ended, .smile, "Smile episode", peak: peak, duration: duration)
+                EventLog.shared.add(.ended, .smile, "Expression episode", peak: peak, duration: duration)
                 Self.notifyEnded(.smile)
                 DispatchQueue.main.async { StatsStore.shared.update { $0.smileSeconds += duration } }
             }
@@ -473,7 +476,7 @@ final class Engine {
         camera.frameQueue.async { [self] in
             missedSamples = []
             missedUntil = monotonicNow() + 1.5
-            EventLog.shared.add(.feedback, .smile, "Missed one: recording 1.5 s as smile")
+            EventLog.shared.add(.feedback, .smile, "Missed one: recording 1.5 s as expression")
         }
     }
 
@@ -486,7 +489,7 @@ final class Engine {
             return
         }
         ModelStore.shared.addFeedback(.smile, positives: Self.weighted(samples))
-        EventLog.shared.add(.feedback, .smile, "Missed one: \(samples.count) frames added as smile, retraining")
+        EventLog.shared.add(.feedback, .smile, "Missed one: \(samples.count) frames added as expression, retraining")
     }
 
     /// Feedback samples count three times, so a few seconds of feedback can move the model.
@@ -499,9 +502,11 @@ final class Engine {
     }
 
     func resetPipeline() {
+        snapshot.update { $0.noFaceSeconds = 0 }
         camera.frameQueue.async { [self] in
             vision.reset()
             clips.clear()
+            noFaceSince = nil
             lastFrameTime = nil
         }
     }

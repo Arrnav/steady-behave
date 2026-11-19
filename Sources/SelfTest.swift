@@ -11,8 +11,8 @@ enum SelfTest {
         print("Steady self-test")
         check("Logistic model learns a separable dataset", logisticModel)
         check("Logistic model survives save and load", modelPersistence)
-        check("Smile features ignore scale and head roll", featureInvariance)
-        check("Smile features react to a wider mouth", featureSensitivity)
+        check("Expression features ignore scale and head roll", featureInvariance)
+        check("Expression features react to a wider mouth", featureSensitivity)
         check("Gaze features have 12 values", gazeFeatures)
         check("Clip writer makes a 3 s .mp4", clipWriter)
         check("Clip recorder saves pre- and post-event frames", clipRecorderFlow)
@@ -35,6 +35,7 @@ enum SelfTest {
         check("Repeated alerts escalate to blur, then speech", escalationSteps)
         check("Mixed habits escalate together, old alerts expire", escalationMixed)
         check("Tolerance sets the thresholds and the meter counts", escalationTolerance)
+        check("Camera turns off when away and back on with input", cameraHoldRules)
         check("Haptics loader reports a backend", haptics)
         print(failures == 0 ? "All checks passed" : "\(failures) check(s) did not pass")
         return failures == 0 ? 0 : 1

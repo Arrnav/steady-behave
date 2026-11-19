@@ -9,7 +9,7 @@ enum SettingsPane: String, CaseIterable, Identifiable {
     var title: String {
         switch self {
         case .general: return "General"
-        case .smile: return "Smile"
+        case .smile: return "Expression"
         case .gaze: return "Looking Away"
         case .activity: return "Activity"
         case .alerts: return "Alerts"
@@ -140,6 +140,13 @@ private struct GeneralPane: View {
                     }
                 }
                 Toggle("Use Battery Saver on battery power", isOn: $app.settings.batterySaverOnBattery)
+                Picker("Watch", selection: $app.settings.watchSchedule) {
+                    ForEach(WatchSchedule.allCases) { Text($0.title).tag($0) }
+                }
+                Toggle("Turn the camera off when I step away", isOn: $app.settings.cameraOffWhenAway)
+                Stepper("After \(Int(app.settings.awayMinutes)) min with no one in view and no input",
+                        value: $app.settings.awayMinutes, in: 1...15, step: 1)
+                    .disabled(!app.settings.cameraOffWhenAway)
                 LabeledContent("In use") {
                     Text("\(app.effectiveQuality.title), \(app.qualityReason.lowercased())").foregroundStyle(.secondary)
                 }
@@ -152,8 +159,10 @@ private struct GeneralPane: View {
             } header: {
                 Text("Camera")
             } footer: {
-                Text("Lower quality analyses fewer frames, which uses less battery and reacts a little slower. "
-                    + "With nobody in view for 10 seconds, Steady checks only twice a second.")
+                Text("The camera itself uses the most power, so turning it off saves the most. "
+                    + "After stepping away it turns back on with any key press or trackpad movement. "
+                    + "Only while studying keeps it on during study sessions and study apps. "
+                    + "Lower quality analyses fewer frames; with nobody in view for 10 seconds, Steady checks only twice a second.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
@@ -201,7 +210,7 @@ private struct GeneralPane: View {
             } header: {
                 Text("Competing response")
             } footer: {
-                Text("The small, calm action shown with each smile alert.")
+                Text("The small, calm action shown with each expression alert.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section {
@@ -242,14 +251,14 @@ private struct SmilePane: View {
         let model = ModelStore.shared.smile
         Form {
             Section {
-                Toggle("Detect the stretched smile", isOn: app.detectionBinding(.smile))
+                Toggle("Detect the stretched expression", isOn: app.detectionBinding(.smile))
             }
             Section("Model") {
-                ModelStatusRow(model: model, emptyText: "Not calibrated. Smile alerts start after calibration.")
-                Button(model == nil ? "Calibrate Smile…" : "Calibrate Again…") { Actions.showSmileCalibration() }
+                ModelStatusRow(model: model, emptyText: "Not calibrated. Expression alerts start after calibration.")
+                Button(model == nil ? "Calibrate Expression…" : "Calibrate Again…") { Actions.showSmileCalibration() }
             }
             Section("When") {
-                Picker("Smile alerts", selection: $app.settings.smileMode) {
+                Picker("Expression alerts", selection: $app.settings.smileMode) {
                     ForEach(SmileMode.allCases) { Text($0.title).tag($0) }
                 }
             }
@@ -261,8 +270,8 @@ private struct SmilePane: View {
             } header: {
                 Text("Detection")
             } footer: {
-                Text("An alert fires when the smile score stays above the threshold for the hold time. "
-                    + "While the smile continues, it repeats after each cooldown.")
+                Text("An alert fires when the expression score stays above the threshold for the hold time. "
+                    + "While the expression continues, it repeats after each cooldown.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Feedback") {
@@ -270,7 +279,7 @@ private struct SmilePane: View {
                 LabeledContent("Missed one", value: "⌃⌥M")
                 LabeledContent("Training frames") {
                     let data = ModelStore.shared.file.smileData
-                    Text("\(data.positives.count) smile, \(data.negatives.count) other")
+                    Text("\(data.positives.count) stretched, \(data.negatives.count) other")
                         .monospacedDigit().foregroundStyle(.secondary)
                 }
             }
@@ -513,7 +522,7 @@ private struct HapticsPane: View {
                 }
             }
             Section {
-                Picker("Smile alert", selection: $app.settings.smileWaveform) {
+                Picker("Expression alert", selection: $app.settings.smileWaveform) {
                     ForEach(Haptics.waveforms, id: \.id) { Text($0.name).tag($0.id) }
                 }
                 Picker("Look-away alert", selection: $app.settings.lookAwayWaveform) {
@@ -521,13 +530,13 @@ private struct HapticsPane: View {
                 }
                 HStack {
                     Spacer()
-                    Button("Play Smile Pattern") { Haptics.shared.alert(.smile, settings: app.settings) }
+                    Button("Play Expression Pattern") { Haptics.shared.alert(.smile, settings: app.settings) }
                     Button("Play Look-Away Pattern") { Haptics.shared.alert(.lookAway, settings: app.settings) }
                 }
             } header: {
                 Text("Patterns")
             } footer: {
-                Text("A smile alert plays its waveform twice, 120 ms apart. Turn haptics on or off for each alert type in Alerts.")
+                Text("An expression alert plays its waveform twice, 120 ms apart. Turn haptics on or off for each alert type in Alerts.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -545,7 +554,7 @@ private struct ClipsPane: View {
         Form {
             Section {
                 Toggle("Save clips of over-active moments and hands at face", isOn: $app.settings.clipsEnabled)
-                Toggle("Also save clips of smile episodes", isOn: $app.settings.smileClips)
+                Toggle("Also save clips of expression episodes", isOn: $app.settings.smileClips)
                     .disabled(!app.settings.clipsEnabled)
             } footer: {
                 Text("Each clip has the 10 seconds before the moment and 4 seconds after, unmirrored, so it shows how others see you.")

@@ -20,7 +20,7 @@ final class SmileCalibrationController: ObservableObject {
     static let steps = [
         Step(title: "Relaxed", instruction: "Read this paragraph normally."),
         Step(title: "Normal expressions", instruction: "Talk out loud, give a small natural smile, raise your eyebrows, yawn, purse your lips."),
-        Step(title: "The stretched smile", instruction: "Do the stretched smile and hold it. Release and do it again 3 or 4 times.")
+        Step(title: "The stretched expression", instruction: "Do the stretched expression and hold it. Release and do it again 3 or 4 times.")
     ]
 
     static let readingText = """
@@ -177,7 +177,7 @@ final class SmileCalibrationController: ObservableObject {
                 self.retryStep3 = false
                 self.phase = .retry("Training did not finish. Please run the calibration again.")
             } else {
-                EventLog.shared.add(.info, .smile, String(format: "Smile model trained, accuracy %.0f%%", (model?.accuracy ?? 0) * 100))
+                EventLog.shared.add(.info, .smile, String(format: "Expression model trained, accuracy %.0f%%", (model?.accuracy ?? 0) * 100))
                 self.phase = .result
             }
         }
@@ -223,7 +223,7 @@ struct SmileCalibrationView: View {
                 }
             }
             .accessibilityElement(children: .ignore)
-            .accessibilityLabel(stepNumber.map { "Step \($0) of 3" } ?? "Smile calibration")
+            .accessibilityLabel(stepNumber.map { "Step \($0) of 3" } ?? "Expression calibration")
             Text(title).font(.largeTitle.weight(.semibold))
             Text(subtitle).font(.body).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
@@ -238,7 +238,7 @@ struct SmileCalibrationView: View {
 
     private var title: String {
         switch controller.phase {
-        case .intro: return "Calibrate smile"
+        case .intro: return "Calibrate expression"
         case .getReady(let s), .capture(let s): return SmileCalibrationController.steps[s - 1].title
         case .training: return "Training"
         case .retry: return "One more try"
@@ -251,21 +251,21 @@ struct SmileCalibrationView: View {
         switch controller.phase {
         case .intro:
             return "Three short steps of 15 seconds each, about a minute in total. "
-                + "Steady learns how your face looks when relaxed, during normal expressions, and during the stretched smile."
+                + "Steady learns how your face looks when relaxed, during normal expressions, and during the stretched expression."
         case .getReady: return "Get ready. Recording starts in a moment."
         case .capture(let s): return SmileCalibrationController.steps[s - 1].instruction
         case .training: return "Learning from your frames. This takes a few seconds."
         case .retry(let message): return message
         case .result: return resultSentence
-        case .testing: return "Relax, then do the stretched smile. The meter shows what the model sees."
+        case .testing: return "Relax, then do the stretched expression. The meter shows what the model sees."
         }
     }
 
     private var resultSentence: String {
         guard let acc = controller.model?.accuracy else { return "The model is ready." }
-        if acc >= 0.9 { return "The model tells your stretched smile apart from your normal face well." }
+        if acc >= 0.9 { return "The model tells your stretched expression apart from your normal face well." }
         if acc >= 0.75 { return "This should work. If alerts feel off, run calibration again in brighter, even light." }
-        return "Your smile and your normal face look similar to the model. Try again with brighter, even light and a clearer smile."
+        return "Your expression and your normal face look similar to the model. Try again with brighter, even light and a clearer expression."
     }
 
     // MARK: Content
@@ -374,7 +374,7 @@ struct SmileCalibrationView: View {
                 Text("accuracy on frames held back from training")
                     .font(.callout).foregroundStyle(.secondary)
                 if let m = controller.model {
-                    Text("\(m.positives) smile frames, \(m.negatives) relaxed and expression frames")
+                    Text("\(m.positives) stretched-expression frames, \(m.negatives) relaxed and normal frames")
                         .font(.callout).foregroundStyle(.secondary)
                 }
             }
@@ -390,7 +390,7 @@ struct SmileCalibrationView: View {
             let above = p > app.settings.smileThreshold
             VStack(alignment: .leading, spacing: 14) {
                 preview.frame(maxWidth: 440)
-                MeterRow(label: "Smile p", value: p, threshold: app.settings.smileThreshold,
+                MeterRow(label: "Expression p", value: p, threshold: app.settings.smileThreshold,
                          color: AlertKind.smile.color, text: String(format: "%.2f", p))
                 HStack {
                     Label(above ? "Above threshold" : "Below threshold", systemImage: above ? "mouth.fill" : "mouth")

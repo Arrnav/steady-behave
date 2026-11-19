@@ -134,7 +134,7 @@ struct DebugView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 12) {
-                    GroupBox("Smile classifier") { smileReadout }
+                    GroupBox("Expression classifier") { smileReadout }
                     GroupBox("Gaze classifier") { gazeReadout }
                     GroupBox("Activity") { activityReadout }
                     GroupBox("Last 60 seconds") { graphs }
@@ -156,7 +156,7 @@ struct DebugView: View {
             CameraOverlayView(layers: layers, mirrored: app.settings.debugMirror)
                 .aspectRatio(4.0 / 3.0, contentMode: .fit)
             VStack(spacing: 8) {
-                MeterRow(label: "Smile", value: model.snap.smile.smoothed, threshold: app.settings.smileThreshold,
+                MeterRow(label: "Expression", value: model.snap.smile.smoothed, threshold: app.settings.smileThreshold,
                          color: AlertKind.smile.color, text: String(format: "%.2f", model.snap.smile.smoothed))
                 MeterRow(label: "Off-screen", value: model.snap.gaze.smoothed, threshold: app.settings.gazeThreshold,
                          color: AlertKind.lookAway.color, text: String(format: "%.2f", model.snap.gaze.smoothed))
@@ -245,7 +245,7 @@ struct DebugView: View {
         let s = model.snap.smile
         return VStack(alignment: .leading, spacing: 8) {
             if ModelStore.shared.smile == nil {
-                Text("Not calibrated yet. Run Calibrate Smile from the menu.")
+                Text("Not calibrated yet. Run Calibrate Expression from the menu.")
                     .font(.callout).foregroundStyle(.secondary)
             }
             MeterRow(label: "Raw p", value: s.raw ?? 0, threshold: app.settings.smileThreshold, color: AlertKind.smile.color.opacity(0.6),
@@ -337,7 +337,7 @@ struct DebugView: View {
 
     private var graphs: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HistoryChart(title: "Smile p", points: model.history, markers: model.markers, now: model.now,
+            HistoryChart(title: "Expression p", points: model.history, markers: model.markers, now: model.now,
                          value: \.smile, threshold: app.settings.smileThreshold, maxY: 1, color: AlertKind.smile.color)
             HistoryChart(title: "Off-screen p", points: model.history, markers: model.markers, now: model.now,
                          value: \.gaze, threshold: app.settings.gazeThreshold, maxY: 1, color: AlertKind.lookAway.color)
@@ -364,7 +364,7 @@ struct DebugView: View {
                 FeatureRow(name: FaceFeatures.smileNames[i], value: value, position: pos, tick: tick)
             }
             if smileModel == nil {
-                Text("Bars and relaxed ticks appear after smile calibration.")
+                Text("Bars and relaxed ticks appear after expression calibration.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }
@@ -372,9 +372,9 @@ struct DebugView: View {
 
     private var tuning: some View {
         VStack(alignment: .leading, spacing: 8) {
-            TuningSlider(label: "Smile threshold", value: $app.settings.smileThreshold, range: 0.3...0.98, format: "%.2f")
-            TuningSlider(label: "Smile hold", value: $app.settings.smileHold, range: 0.1...3, format: "%.1f s")
-            TuningSlider(label: "Smile cooldown", value: $app.settings.smileCooldown, range: 2...60, format: "%.0f s")
+            TuningSlider(label: "Expression threshold", value: $app.settings.smileThreshold, range: 0.3...0.98, format: "%.2f")
+            TuningSlider(label: "Expression hold", value: $app.settings.smileHold, range: 0.1...3, format: "%.1f s")
+            TuningSlider(label: "Expression cooldown", value: $app.settings.smileCooldown, range: 2...60, format: "%.0f s")
             Divider()
             TuningSlider(label: "Gaze threshold", value: $app.settings.gazeThreshold, range: 0.3...0.98, format: "%.2f")
             TuningSlider(label: "Gaze grace", value: $app.settings.gazeGrace, range: 0.5...10, format: "%.1f s")

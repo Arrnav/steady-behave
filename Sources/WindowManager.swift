@@ -62,11 +62,11 @@ enum Actions {
 
     static func missedOne() {
         guard AppState.shared.settings.detects(.smile) else {
-            EventLog.shared.add(.feedback, .smile, "Missed one: smile detection is off")
+            EventLog.shared.add(.feedback, .smile, "Missed one: expression detection is off")
             return
         }
         guard ModelStore.shared.smile != nil else {
-            EventLog.shared.add(.feedback, .smile, "Missed one: calibrate the smile first")
+            EventLog.shared.add(.feedback, .smile, "Missed one: calibrate the expression first")
             return
         }
         Engine.shared.missedOne()
@@ -112,7 +112,7 @@ enum Actions {
         }
         let controller = SmileCalibrationController()
         controller.open()
-        WindowManager.shared.show("smileCalibration", title: "Calibrate Smile", size: NSSize(width: 760, height: 640),
+        WindowManager.shared.show("smileCalibration", title: "Calibrate Expression", size: NSSize(width: 760, height: 640),
                                   minSize: NSSize(width: 680, height: 600), onClose: { controller.cancel() },
                                   content: { SmileCalibrationView(controller: controller) })
     }

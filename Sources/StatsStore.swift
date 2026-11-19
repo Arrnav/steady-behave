@@ -113,10 +113,10 @@ final class StatsStore: ObservableObject {
         try? FileManager.default.removeItem(at: url)
     }
 
-    /// One line for the menu, for example "Today: 14 smiles · 6 look-aways · 1h 40m focused".
+    /// One line for the menu, for example "Today: 14 expressions · 6 look-aways · 1h 40m focused".
     var todaySummary: String {
         let t = today
-        let smiles = t.smileEpisodes == 1 ? "1 smile" : "\(t.smileEpisodes) smiles"
+        let smiles = t.smileEpisodes == 1 ? "1 expression" : "\(t.smileEpisodes) expressions"
         let looks = t.lookAways == 1 ? "1 look-away" : "\(t.lookAways) look-aways"
         return "Today: \(smiles) · \(looks) · \(Format.duration(t.focusedSeconds)) focused"
     }

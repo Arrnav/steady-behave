@@ -125,10 +125,13 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(summary)
         let smileOn = app.settings.detects(.smile)
         if smileOn, ModelStore.shared.smile == nil {
-            menu.addItem(disabled("Smile alerts start after calibration"))
+            menu.addItem(disabled("Expression alerts start after calibration"))
         }
         if app.cameraRunning == false, !paused, app.cameraAuthorization == .authorized {
             if app.screenLocked || app.displayAsleep { menu.addItem(disabled("Camera off while the screen is locked")) }
+        }
+        if let hold = app.cameraHold, !paused {
+            menu.addItem(disabled(hold.menuText))
         }
         if let quiet = focus.quietReason {
             menu.addItem(disabled("Quiet mode: \(quiet)"))
@@ -182,7 +185,7 @@ final class StatusBarController: NSObject, NSMenuDelegate {
         menu.addItem(.separator())
         menu.addItem(item("Clips", symbol: "film", action: #selector(openClips)))
         menu.addItem(item("Stats", symbol: "chart.bar", action: #selector(openStats)))
-        menu.addItem(item("Calibrate Smile", symbol: "mouth", action: #selector(calibrateSmile)))
+        menu.addItem(item("Calibrate Expression", symbol: "mouth", action: #selector(calibrateSmile)))
         menu.addItem(item("Calibrate Gaze", symbol: "scope", action: #selector(calibrateGaze)))
         let debug = item("Debug Mode", symbol: "waveform.path.ecg", action: #selector(openDebug))
         debug.keyEquivalent = "d"

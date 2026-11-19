@@ -29,7 +29,7 @@ struct ClipInfo: Codable {
         case .handsAtFace:
             parts.append("Hands near face for \(secs) s")
         case .smile:
-            parts.append("Stretched smile, \(secs) s clip")
+            parts.append("Stretched expression, \(secs) s clip")
         case .lookAway:
             parts.append("Looking away, \(secs) s clip")
         }
@@ -39,7 +39,7 @@ struct ClipInfo: Codable {
             parts.append("\(Int(handNearPercent.rounded()))% of the clip")
         }
         if smileEpisodes > 0, type != .smile {
-            parts.append(smileEpisodes == 1 ? "1 smile" : "\(smileEpisodes) smiles")
+            parts.append(smileEpisodes == 1 ? "1 expression" : "\(smileEpisodes) expressions")
         }
         return parts.joined(separator: ", ")
     }

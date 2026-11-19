@@ -193,7 +193,7 @@ extension SelfTest {
         inputSettings.inputPauses[AlertKind.lookAway.rawValue] = false
         let typingCustom = DetectionGates(settings: inputSettings, focus: focus, inputActive: true)
         guard !typingCustom.smile, typingCustom.inputPaused == [.smile] else { return "custom input pauses were not applied" }
-        guard DetectionGates(settings: inputSettings, focus: focus, inputActive: false).smile else { return "smile stayed paused without input" }
+        guard DetectionGates(settings: inputSettings, focus: focus, inputActive: false).smile else { return "expression stayed paused without input" }
         focus.paused = true
         let paused = DetectionGates(settings: Settings(), focus: focus)
         guard !paused.smile, !paused.lookAway, !paused.overActive, !paused.hands else { return "a detection runs while paused" }
@@ -226,7 +226,7 @@ extension SelfTest {
         guard decisions[..<4].allSatisfy({ !$0.speak }), decisions[4].speak else { return "speech did not start at the 5th alert" }
         guard !decisions[5].speak, !decisions[6].speak else { return "speech repeated inside the 5 minute cooldown" }
         let text = EscalationTracker.sentence(for: .smile, decision: decisions[4], minutes: 10, competingResponse: "Lips together.")
-        guard text == "5 stretched smiles in the last 10 minutes. Lips together." else { return "sentence: \(text)" }
+        guard text == "5 stretched expressions in the last 10 minutes. Lips together." else { return "sentence: \(text)" }
         return nil
     }
 
@@ -263,6 +263,32 @@ extension SelfTest {
         let counts = tracker.counts(now: 10, settings: settings)
         guard counts[.handsAtFace] == 5, counts[.smile] == nil else { return "meter counts \(counts)" }
         guard tracker.counts(now: 10 + 11 * 60, settings: settings).isEmpty else { return "meter kept expired alerts" }
+        return nil
+    }
+
+    static func cameraHoldRules() -> String? {
+        typealias Hold = CameraHold
+        guard !Hold.nextAway(held: false, cameraRunning: true, noFaceSeconds: 30, idleInputSeconds: 90, awaySeconds: 60) else {
+            return "turned off with a face seen recently"
+        }
+        guard !Hold.nextAway(held: false, cameraRunning: true, noFaceSeconds: 90, idleInputSeconds: 10, awaySeconds: 60) else {
+            return "turned off while the keyboard or trackpad was in use"
+        }
+        guard Hold.nextAway(held: false, cameraRunning: true, noFaceSeconds: 61, idleInputSeconds: 61, awaySeconds: 60) else {
+            return "stayed on with no face and no input"
+        }
+        guard Hold.nextAway(held: true, cameraRunning: false, noFaceSeconds: 0, idleInputSeconds: 300, awaySeconds: 60),
+              !Hold.nextAway(held: true, cameraRunning: false, noFaceSeconds: 0, idleInputSeconds: 0.5, awaySeconds: 60) else {
+            return "input did not bring the camera back"
+        }
+        guard Hold.decide(schedule: .always, studying: false, onBattery: true, away: false) == nil,
+              Hold.decide(schedule: .studyOnly, studying: false, onBattery: false, away: false) == .notStudying(onBattery: false),
+              Hold.decide(schedule: .studyOnly, studying: true, onBattery: false, away: false) == nil,
+              Hold.decide(schedule: .studyOnlyOnBattery, studying: false, onBattery: false, away: false) == nil,
+              Hold.decide(schedule: .studyOnlyOnBattery, studying: false, onBattery: true, away: false) == .notStudying(onBattery: true),
+              Hold.decide(schedule: .always, studying: true, onBattery: false, away: true) == .away else {
+            return "watch schedule rules"
+        }
         return nil
     }
 

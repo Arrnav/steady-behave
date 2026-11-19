@@ -22,7 +22,7 @@
 
 Steady is a small macOS menu bar app that helps you stay focused while you study and work. It watches you through the MacBook's built-in camera and gives a gentle nudge (a screen flash, a soft sound and a trackpad tap) when it notices one of these habits:
 
-- a stretched, tense smile or face you make without noticing while reading or thinking
+- a stretched, tense expression or face you make without noticing while reading or thinking
 - looking away from the screen during a study session
 - fidgeting a lot, or touching your face, hair or beard
 
@@ -60,7 +60,7 @@ The build script signs the app with your "Apple Development" certificate if one 
 ## First run
 
 1. Allow camera access when macOS asks.
-2. From the menu bar icon, run **Calibrate Smile** (about 1 minute).
+2. From the menu bar icon, run **Calibrate Expression** (about 1 minute).
 3. Run **Calibrate Gaze** (about 40 seconds).
 4. Start a study session with **⌃⌥S**.
 
@@ -75,7 +75,7 @@ The build script signs the app with your "Apple Development" certificate if one 
 
 ## How detection works
 
-- **Smile:** Vision face landmarks are turned into measurements such as mouth width, corner lift and eye openness. A small model trained on your own calibration data decides whether it's the stretched smile. The hotkeys above add new examples and retrain it.
+- **Expression:** Vision face landmarks are turned into measurements such as mouth width, corner lift and eye openness. A small model trained on your own calibration data decides whether it's the stretched expression. The hotkeys above add new examples and retrain it.
 - **Looking away:** head angle and pupil position, learned from a calibration where you follow a moving dot. Alerts are muted while you're typing or using the mouse.
 - **Fidgeting:** overall movement compared with your calm level, head movement, and hands near your face (Vision hand pose).
 
@@ -87,17 +87,23 @@ The glow color for each alert type can be changed in **Settings > Alerts**, alon
 
 ## When nudges stop working
 
-Alerts can start to feel routine. If a habit keeps coming back, Steady steps up. After 3 alerts for the same habit (or 6 of any kind) within 10 minutes, the screen blurs a little until the habit stops. After 5, a calm voice says what is happening, for example "5 stretched smiles in the last 10 minutes", followed by your competing response. **Settings > Repeated Habits** has a Tolerance slider that moves all of these limits together, a live meter showing how close each habit is to a blur or a reminder, and separate controls for each step. Nothing escalates during calls or the quiet hour.
+Alerts can start to feel routine. If a habit keeps coming back, Steady steps up. After 3 alerts for the same habit (or 6 of any kind) within 10 minutes, the screen blurs a little until the habit stops. After 5, a calm voice says what is happening, for example "5 stretched expressions in the last 10 minutes", followed by your competing response. **Settings > Repeated Habits** has a Tolerance slider that moves all of these limits together, a live meter showing how close each habit is to a blur or a reminder, and separate controls for each step. Nothing escalates during calls or the quiet hour.
 
 The reminder uses the best female system voice installed (any installed voice can be picked), has its own volume, and by default is only spoken when headphones are connected, so it never plays out loud by accident. macOS doesn't let other apps use Siri's voices; the free Premium system voices sound closest, and **Get More Voices** opens the page where they can be downloaded.
 
 ## Typing and the trackpad
 
-**Settings > General > Keyboard and Trackpad** chooses whether input pauses anything, which inputs count, for how long, and which detections pause. By default only looking away pauses (glancing at the keyboard is on-task), so smiles and fidgeting are still caught while you type.
+**Settings > General > Keyboard and Trackpad** chooses whether input pauses anything, which inputs count, for how long, and which detections pause. By default only looking away pauses (glancing at the keyboard is on-task), so expressions and fidgeting are still caught while you type.
 
 ## Battery use
 
-The camera itself uses some power whenever it is on. To keep the rest low, **Settings > General > Camera > Quality** sets how many frames are analysed: High (15 a second), Balanced (10, the default) or Battery Saver (5). Battery Saver turns on by itself when the Mac is on battery or in Low Power Mode. When nobody is in view for 10 seconds, Steady only looks for a face, twice a second. Pausing, locking the screen or sleeping turns the camera off completely.
+The camera itself uses most of the power, so the biggest saving is having it off. Settings > General > Camera has:
+
+- **Turn the camera off when I step away** (on by default): after a minute with no one in view and no keyboard or trackpad use, the camera turns off completely. Any key press or pointer movement turns it back on.
+- **Watch**: always while monitoring, only while studying (a study session or a study app in front), or only while studying when on battery.
+- **Quality**: how many frames are analysed, High (15 a second), Balanced (10, the default) or Battery Saver (5). Battery Saver turns on by itself on battery or in Low Power Mode.
+
+When nobody is in view for 10 seconds, Steady only looks for a face, twice a second. Pausing, locking the screen or sleeping turns the camera off too.
 
 ## Debug mode
 
@@ -129,10 +135,10 @@ Sources/
   Engine.swift              runs detection on each camera frame and hands alerts to the UI
   CameraService.swift       AVCaptureSession, built-in camera by default
   VisionPipeline.swift      Vision requests per frame: face, landmarks, hands, body, motion
-  FaceFeatures.swift        landmarks to smile and gaze measurements
+  FaceFeatures.swift        landmarks to expression and gaze measurements
   LogisticModel.swift       the small personal classifier and its storage
   EpisodeTracker.swift      hold time, cooldown and repeat rules shared by all alerts
-  SmileDetector.swift       stretched smile
+  SmileDetector.swift       stretched expression
   AttentionDetector.swift   looking away
   ActivityDetector.swift    movement, head speed, upper body and hands near the face
   FocusContext.swift        study sessions, study apps, quiet mode during calls

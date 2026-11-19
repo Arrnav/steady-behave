@@ -12,8 +12,9 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 ## Camera
 
 - The video data output asks for 640x480 buffers explicitly, and the device's 640x480 format is selected directly. On recent macOS the VGA session preset alone can still deliver 1920x1080 frames.
-- 640x480 is the built-in camera's smallest mode and 15 fps its lowest rate. Asking for smaller frames makes macOS scale every frame, which measured costlier than processing the full frame, so the quality setting changes how many frames are analysed instead: High 15 fps, Balanced 10 fps, Battery Saver 5 fps with pose checks on every 4th analysed frame.
+- 640x480 is the built-in camera's smallest mode and 15 fps its lowest rate. Asking for smaller frames makes macOS scale every frame, which measured costlier than processing the full frame, so the quality setting changes how many frames are analysed instead: High 15 fps, Balanced 10 fps, Battery Saver 5 fps with pose checks on every 5th analysed frame (about once a second).
 - The capture pipeline itself costs about 7 to 8% of one core while the camera is on, whatever the app does with the frames. Analysis comes on top of that, so the biggest savings are a lower rate and the idle mode: after 10 seconds with no face in view, only face detection runs, twice a second.
+- The camera can be held off while monitoring stays on. "Stepped away" starts after `awayMinutes` (1 by default) with no face and no keyboard or trackpad input, and ends with any input; while held, the session timer pauses. The watch schedule can also keep the camera off outside study time, always or only on battery. With the camera off, the app measures 0% CPU. The rules are pure functions in `CameraHold`, covered by the self-test.
 - Battery Saver is used automatically on battery power (can be turned off) and in Low Power Mode. The power source is checked every 10 seconds.
 - Hand pose runs only when hands-at-face is on (or the debug preview is open), and body pose only when over-active detection uses it.
 - Frames are 420f YUV. Vision reads YUV directly, and motion energy comes straight from the luma plane, which uses much less CPU than converting every frame to BGRA.
@@ -26,7 +27,7 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 - Full face detection runs on every 3rd frame. In between, the last landmark observation is passed back in as the face, and a landmark confidence below 0.5 forces a fresh detection. This saves about a third of the CPU.
 - Hand pose and body pose each run on every 3rd frame, on different frames.
 - Memory settles near 200 MB. When CPU use stays above 15%, the frame rate is capped at 10 fps with hand pose every 4th frame. The first 15 seconds are not measured, because loading the Vision models makes them look busier than normal.
-- Smoothing of the smile and gaze scores is based on elapsed time (alpha 0.3 per 1/15 s), so alerts react at the same speed at every quality.
+- Smoothing of the expression and gaze scores is based on elapsed time (alpha 0.3 per 1/15 s), so alerts react at the same speed at every quality.
 - The compute device is left at the system default. Forcing the Neural Engine or GPU made no measurable difference.
 
 ## Personal models
@@ -38,7 +39,7 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 
 ## Alerts
 
-- All four alert types share one `EpisodeTracker`. The condition must hold for the hold time, alerts are at least one cooldown apart (inside and across episodes), and each episode has a cap (smile 3, look-away 3, over-active 1, hands 1).
+- All four alert types share one `EpisodeTracker`. The condition must hold for the hold time, alerts are at least one cooldown apart (inside and across episodes), and each episode has a cap (expression 3, look-away 3, over-active 1, hands 1).
 - Episodes are counted in stats when the hold time is reached, even if the alert itself is held back by the cooldown.
 - Which detections run on a frame is decided in one place, `DetectionGates`, from the settings, the pause state and the focus context. A detection that is switched off gives no alerts, stats or clips. With hands-at-face off, hands near the face also stop raising the activity score.
 - No face for up to 30 s after a face was seen counts as looking away. From 30 to 45 s it counts as neither. After 45 s it is "away from desk": alerts stop and the session timer pauses.
@@ -83,4 +84,4 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 ## Developer flags
 
 - `--selftest` runs the checks and exits with 0 or 1.
-- `--show` opens windows or triggers actions at launch, for checking layouts: `debug`, `mini`, `settings`, `clips`, `stats`, `smile`, `gaze`, `menu`, `alert`, `session`, `pause`, `blur`, `voice`. `--pane <name>` picks the first Settings pane, and `--quality high|balanced|batterySaver` overrides the camera quality without saving it.
+- `--show` opens windows or triggers actions at launch, for checking layouts: `debug`, `mini`, `settings`, `clips`, `stats`, `expression`, `gaze`, `menu`, `alert`, `session`, `pause`, `blur`, `voice`. `--pane <name>` picks the first Settings pane, and `--quality high|balanced|batterySaver` overrides the camera quality without saving it.
