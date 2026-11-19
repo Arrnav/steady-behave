@@ -53,6 +53,7 @@ Short notes on choices that aren't obvious from the code, with the reason for ea
 - The blur is a click-through window with a behind-window `NSVisualEffectView`, one level below the alert glow so the glow and label stay sharp. Its strength is the window's opacity. It clears when the habit's episode ends (after at least 1.5 s) or after its time limit.
 - One tolerance value N sets the thresholds together: blur after N alerts for a habit, speech after N + 2, blur after 2N of any kind. Each can still be changed on its own, and a live meter shows the current counts.
 - Speech uses `AVSpeechSynthesizer`, which runs on the Mac. Apps can't make Siri speak or use Siri voices, so the picker lists the standard and any downloaded Enhanced or Premium system voices. The automatic choice is the best-quality female voice installed.
+- Alert sounds on Bluetooth output start with 0.4 s of silence and the sound itself follows 0.25 s later. Idle Bluetooth headphones need a moment to wake and would otherwise swallow most of a short alert sound. Playing sounds are kept referenced until they finish.
 - Speech has its own volume and, by default, only plays when the output is Bluetooth audio or wired headphones (read from Core Audio: transport type, or the built-in output's "hdpn" data source). Test Voice always plays.
 - Quiet mode (calls, quiet hour) never escalates.
 

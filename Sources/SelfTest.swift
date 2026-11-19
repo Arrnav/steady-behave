@@ -36,6 +36,7 @@ enum SelfTest {
         check("Mixed habits escalate together, old alerts expire", escalationMixed)
         check("Tolerance sets the thresholds and the meter counts", escalationTolerance)
         check("Camera turns off when away and back on with input", cameraHoldRules)
+        check("Bluetooth wake-up silence is valid audio", wakeSilence)
         check("Haptics loader reports a backend", haptics)
         print(failures == 0 ? "All checks passed" : "\(failures) check(s) did not pass")
         return failures == 0 ? 0 : 1

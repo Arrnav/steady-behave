@@ -20,6 +20,13 @@ enum AudioOutput {
         return AudioObjectGetPropertyData(device, &address, 0, nil, &size, &value) == noErr ? value : nil
     }
 
+    /// True for Bluetooth audio (AirPods, other headphones, speakers).
+    static var isBluetooth: Bool {
+        guard let device = defaultDevice() else { return false }
+        let transport = uint32(kAudioDevicePropertyTransportType, of: device)
+        return transport == kAudioDeviceTransportTypeBluetooth || transport == kAudioDeviceTransportTypeBluetoothLE
+    }
+
     /// True for Bluetooth audio (AirPods and other headphones) and for wired headphones on the built-in jack.
     static var isHeadphones: Bool {
         guard let device = defaultDevice() else { return false }

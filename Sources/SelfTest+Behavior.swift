@@ -292,6 +292,12 @@ extension SelfTest {
         return nil
     }
 
+    static func wakeSilence() -> String? {
+        guard let silence = AlertCenter.wakeSilence else { return "macOS could not read the silent sound" }
+        guard abs(silence.duration - 0.4) < 0.05 else { return String(format: "silence lasts %.2f s", silence.duration) }
+        return nil
+    }
+
     static func haptics() -> String? {
         let backend = Haptics.shared.backend
         print("      haptic backend: \(backend.rawValue) \(Haptics.shared.detail)")
